@@ -95,15 +95,23 @@ const pages=[
  ['dashboard','◫','סקירה'],['cashflow','⌁','תזרים'],['transactions','↕','תנועות'],['budget','◉','תקציב'],
  ['wealth','◇','הון עצמי'],['wallets','◈','ארנקים'],['goals','◎','מטרות'],['debts','↘','חובות'],['reports','▥','דוחות'],['review','✓','סגירת חודש'],['settings','⚙','הגדרות']
 ];
+const mobilePrimaryPages=['dashboard','cashflow','transactions','budget'];
 function nav(){
  $('#nav').innerHTML=pages.map(([id,ic,n])=>`<button class="nav-btn ${id===current?'active':''}" data-page="${id}"><span>${ic}</span>${n}</button>`).join('');
- let mobile=pages.filter(x=>['dashboard','cashflow','transactions','budget','reports'].includes(x[0]));
- $('#mobileNav').innerHTML=mobile.map(([id,ic,n])=>`<button class="nav-btn ${id===current?'active':''}" data-page="${id}"><span>${ic}</span>${n}</button>`).join('')
+ let mobile=pages.filter(x=>mobilePrimaryPages.includes(x[0])),moreActive=!mobilePrimaryPages.includes(current);
+ $('#mobileNav').innerHTML=mobile.map(([id,ic,n])=>`<button class="nav-btn ${id===current?'active':''}" data-page="${id}"><span>${ic}</span>${n}</button>`).join('')+`<button class="nav-btn ${moreActive?'active':''}" id="mobileMore" type="button"><span>☰</span>עוד</button>`
+}
+function openMobilePages(){
+ let extra=pages.filter(([id])=>!mobilePrimaryPages.includes(id));
+ modal('כל הדפים',`<div class="mobile-page-grid">${extra.map(([id,ic,n])=>`<button type="button" class="mobile-page-btn ${id===current?'active':''}" data-mobile-page="${id}"><span>${ic}</span><b>${n}</b></button>`).join('')}</div><button type="button" class="ghost full-btn" data-close-mobile>סגירה</button>`,()=>{});
+ $$('[data-mobile-page]').forEach(b=>b.onclick=()=>{current=b.dataset.mobilePage;$('#modal').hidden=true;render()});
+ $('[data-close-mobile]').onclick=()=>$('#modal').hidden=true
 }
 function heading(t,s=''){ $('#title').textContent=t;$('#subtitle').textContent=s }
 function monthPicker(){return `<div class="month-switch"><button class="ghost" data-month="-1">‹</button><b>${monthName(selectedMonth)}</b><button class="ghost" data-month="1">›</button></div>`}
 function bind(){
  $$('[data-page]').forEach(b=>b.onclick=()=>{current=b.dataset.page;render()});
+ $('#mobileMore')?.addEventListener('click',openMobilePages);
  $$('[data-action]').forEach(b=>b.onclick=()=>actions[b.dataset.action]?.(b.dataset.id));
  $$('[data-global-add]').forEach(b=>b.onclick=()=>actions.addTx());
  $$('[data-month]').forEach(b=>b.onclick=()=>{let d=new Date(selectedMonth+'-15');d.setMonth(d.getMonth()+Number(b.dataset.month));selectedMonth=monthKey(d);render()})
