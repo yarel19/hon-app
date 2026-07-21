@@ -1,4 +1,6 @@
 const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const mobileDevice=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)||window.matchMedia?.('(pointer:coarse)').matches;
+document.documentElement.classList.toggle('mobile-device',!!mobileDevice);
 const uid=()=>crypto.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2);
 const numberAmount=n=>new Intl.NumberFormat('he-IL',{minimumFractionDigits:0,maximumFractionDigits:2}).format(Math.abs(Number(n)||0));
 const money=n=>`${Number(n)<0?'−':''}${numberAmount(n)} ₪`;
@@ -13,7 +15,7 @@ const walletPalette={bit:'#1976d2',paybox:'#7c3aed',digital:'#0f9f8f',fighter:'#
 const fixedExpenseWords=['שכר דירה','שכירות','משכנתא','ארנונה','ועד בית','ביטוח','הלוואה','חשבון','חשבונות','חשמל','מים','גז','גן','גנים','מעון','צהרון','אינטרנט','טלפון','סלולר','מנוי'];
 
 const defaults={
- version:10,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
+ version:11,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
  settings:{name:'יראל',currency:'ILS',onboarded:false,budgetSort:'manual'},
 };
 const defaultCategories=[
@@ -33,7 +35,7 @@ function migrate(raw){
  d.categories=d.categories.map(c=>({...c,budgetBehavior:['fixed','variable'].includes(c.budgetBehavior)?c.budgetBehavior:'auto'}));
  d.ironBudget=d.ironBudget&&Array.isArray(d.ironBudget.categories)?d.ironBudget:{income:0,categories:[]};
  d.goals=d.goals.map(g=>{let hadNewSchedule=!!(g.startMonth||g.deadlineMonth),startMonth=g.startMonth||monthKey(),deadlineMonth=g.deadlineMonth||(g.date||'').slice(0,7),term=g.term||(monthsInclusive(startMonth,deadlineMonth)&&monthsInclusive(startMonth,deadlineMonth)<=24?'short':'long');return{...g,target:+g.target||0,current:+g.current||0,monthly:+g.monthly||0,startMonth,deadlineMonth,calculationMode:g.calculationMode||(hadNewSchedule?'auto':'manual'),moneyLocation:g.moneyLocation||'',term}});
- d.version=10;return d
+ d.version=11;return d
 }
 let db=migrate(JSON.parse(localStorage.getItem('honSheli')||'null')),current='dashboard',selectedMonth=monthKey(),flowView='transactions',deferredInstall;
 const persist=(cloud=true)=>{localStorage.setItem('honSheli',JSON.stringify(db));if(cloud)window.HONCloud?.queueSync(db)};
@@ -554,7 +556,7 @@ function goals(){
  }).join('');
  let activeRows=active.map(g=>`<div class="goal-load-row smart-load-row"><span><b>${esc(g.name)}</b><small>${esc(g.moneyLocation||'מיקום לא הוגדר')}${g.deadlineMonth?` · עד ${monthName(g.deadlineMonth)}`:''}</small></span><strong>${money(goalMonthlyAmount(g))}</strong></div>`).join('');
  $('#view').innerHTML=`<div class="goals-toolbar"><div><h2>תוכנית המטרות שלי</h2><p>הכול במקום אחד, לפי החודש שבחרת</p></div><button class="primary" data-action="addGoal">＋ מטרה חדשה</button></div><div class="grid two goal-stats goal-stats-compact"><div class="card stat"><small>סך כל היעדים</small><strong>${money(targets)}</strong><span class="trend">${sorted.length} מטרות</span></div><div class="card stat"><small>כבר נצבר</small><strong class="up">${money(saved)}</strong><span class="trend">${targets?numberAmount(saved/targets*100):0}% מכלל היעדים</span></div></div><div class="goals-command section-space"><section class="card goal-month-panel smart-goal-panel"><div class="smart-panel-head"><div><small>תוכנית החיסכון לחודש</small><h3>${monthName(selectedMonth)}</h3></div><span class="smart-panel-icon">◎</span></div><div class="goal-month-picker"><button class="ghost" data-month="-1" aria-label="חודש קודם">‹</button><input id="goalMonthJump" type="month" value="${selectedMonth}" aria-label="בחירת חודש"><button class="ghost" data-month="1" aria-label="חודש הבא">›</button></div><div class="goal-load-summary"><strong class="goal-load-total">${money(monthlyTotal)}</strong><span>סך הכול לחיסכון החודש</span><small>${active.length?`${active.length} מטרות פעילות`:'אין מטרות פעילות בחודש הזה'}</small></div><div class="goal-load-list">${activeRows||'<div class="smart-empty">אפשר לעבור לחודש אחר או להוסיף מטרה חדשה</div>'}</div></section><section class="goals-main"><div class="goals-section-head"><div><h3>המטרות שלי</h3><small>${sorted.length?'מסודרות לפי מועד ההתחלה':'כאן יופיעו המטרות שלך'}</small></div></div><div class="goal-cards goal-cards-smart">${cards||empty('◎','אין עדיין מטרות','קרן חירום, בר מצווה, בית או חופשה')}</div></section></div><details id="goalsSchedule" class="card goals-schedule goals-schedule-details section-space"><summary><span><b>לוח זמנים מלא</b><small>כל התאריכים והסכומים בטבלה אחת</small></span><em>${sorted.length} מטרות</em></summary>${sorted.length?`<div class="goals-table-wrap"><table class="goals-table"><thead><tr><th>מטרה</th><th>איפה הכסף</th><th>מתחילים</th><th>יעד</th><th>סכום יעד</th><th>לחודש</th><th>מצב</th></tr></thead><tbody>${timeline}</tbody></table></div>`:empty('◎','אין עדיין מטרות','הוסף מטרה עם חודש התחלה ותאריך יעד')}</details>`;
- $('#goalMonthJump').onchange=e=>{if(e.target.value){selectedMonth=e.target.value;render()}};$('#goalsSchedule').open=window.innerWidth>720
+ $('#goalMonthJump').onchange=e=>{if(e.target.value){selectedMonth=e.target.value;render()}};$('#goalsSchedule').open=!mobileDevice&&window.innerWidth>720
 }
 function bindGoalCalculator(){
  let start=$('#goalStart'),end=$('#goalEnd'),target=$('#goalTarget'),currentInput=$('#goalCurrent'),preview=$('#goalCalc');if(!start||!end)return;
@@ -586,7 +588,7 @@ function decorateBudgetCards(){
   if(remaining)remaining.innerHTML=planned?`חריגה של <b>${money(actual-planned)}</b>`:`הוצאה ללא יעד: <b>${money(actual)}</b>`;
  })
 }
-function importData(e){let r=new FileReader;r.onload=()=>{try{db=migrate(JSON.parse(r.result));persist();render();toast('הגיבוי שוחזר ושודרג ל־HON v10')}catch{alert('קובץ הגיבוי אינו תקין')}};r.readAsText(e.target.files[0])}
+function importData(e){let r=new FileReader;r.onload=()=>{try{db=migrate(JSON.parse(r.result));persist();render();toast('הגיבוי שוחזר ושודרג ל־HON v11')}catch{alert('קובץ הגיבוי אינו תקין')}};r.readAsText(e.target.files[0])}
 function importCsv(e){let r=new FileReader;r.onload=()=>{try{let lines=r.result.replace(/^\ufeff/,'').split(/\r?\n/).filter(Boolean),head=parseCsv(lines.shift()).map(x=>x.toLowerCase()),count=0;for(let line of lines){let v=parseCsv(line),o=Object.fromEntries(head.map((h,i)=>[h,v[i]||'']));if(!o.date||!o.amount)continue;let c=db.categories.find(x=>x.name===o.category);if(!c&&o.category){c={id:uid(),name:o.category,kind:o.kind==='income'?'income':'expense',color:'#718096'};db.categories.push(c)}db.transactions.push({id:uid(),date:o.date.slice(0,10),kind:o.kind||'expense',amount:+o.amount,category:c?.id,note:o.note||'',reviewed:false});count++}save(`${count} תנועות יובאו`)}catch{alert('לא הצלחנו לקרוא את הקובץ')}};r.readAsText(e.target.files[0])}
 function parseCsv(line){let out=[],cur='',q=false;for(let i=0;i<line.length;i++){let c=line[i];if(c==='"'&&line[i+1]==='"'){cur+='"';i++}else if(c==='"')q=!q;else if(c===','&&!q){out.push(cur);cur=''}else cur+=c}out.push(cur);return out}
 function toast(s){let t=$('#toast');t.textContent=s;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
