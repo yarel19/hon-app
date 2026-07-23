@@ -19,7 +19,7 @@ const categoryPalette=[
 const fixedExpenseWords=['שכר דירה','שכירות','משכנתא','ארנונה','ועד בית','ביטוח','הלוואה','חשבון','חשבונות','חשמל','מים','גז','גן','גנים','מעון','צהרון','אינטרנט','טלפון','סלולר','מנוי'];
 
 const defaults={
- version:14,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
+ version:15,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
  settings:{name:'יראל',currency:'ILS',onboarded:false,budgetSort:'manual'},
 };
 const defaultCategories=[
@@ -39,7 +39,7 @@ function migrate(raw){
  d.categories=d.categories.map(c=>({...c,budgetBehavior:['fixed','variable'].includes(c.budgetBehavior)?c.budgetBehavior:'auto'}));
  d.ironBudget=d.ironBudget&&Array.isArray(d.ironBudget.categories)?d.ironBudget:{income:0,categories:[]};
  d.goals=d.goals.map(g=>{let hadNewSchedule=!!(g.startMonth||g.deadlineMonth),startMonth=g.startMonth||monthKey(),deadlineMonth=g.deadlineMonth||(g.date||'').slice(0,7),term=g.term||(monthsInclusive(startMonth,deadlineMonth)&&monthsInclusive(startMonth,deadlineMonth)<=24?'short':'long');return{...g,target:+g.target||0,current:+g.current||0,monthly:+g.monthly||0,startMonth,deadlineMonth,calculationMode:g.calculationMode||(hadNewSchedule?'auto':'manual'),moneyLocation:g.moneyLocation||'',term}});
- d.version=14;return d
+ d.version=15;return d
 }
 let db=migrate(JSON.parse(localStorage.getItem('honSheli')||'null')),current='dashboard',selectedMonth=monthKey(),flowView='transactions',deferredInstall;
 const persist=(cloud=true)=>{localStorage.setItem('honSheli',JSON.stringify(db));if(cloud)window.HONCloud?.queueSync(db)};
@@ -101,10 +101,10 @@ function insights(m=selectedMonth){
 }
 
 const pages=[
- ['dashboard','◫','סקירה'],['cashflow','⌁','תזרים ותנועות'],['budget','◉','תקציב'],
+ ['dashboard','◫','סקירה'],['cashflow','⌁','תקציב ותזרים'],
  ['wealth','◇','הון עצמי'],['wallets','◈','ארנקים'],['goals','◎','מטרות'],['debts','↘','חובות'],['review','✓','סגירת חודש'],['settings','⚙','הגדרות']
 ];
-const mobilePrimaryPages=['dashboard','cashflow','budget','goals'];
+const mobilePrimaryPages=['dashboard','cashflow','wealth','goals'];
 function nav(){
  $('#nav').innerHTML=pages.map(([id,ic,n])=>`<button class="nav-btn ${id===current?'active':''}" data-page="${id}"><span>${ic}</span>${n}</button>`).join('');
  let mobile=pages.filter(x=>mobilePrimaryPages.includes(x[0])),moreActive=!mobilePrimaryPages.includes(current);
@@ -514,9 +514,21 @@ function dashboard(){
 function combinedTransactionsPanel(){
  return `<div class="toolbar section-space"><button class="primary" data-action="addTx">＋ תנועה חדשה</button><button class="ghost" data-action="addCat">＋ קטגוריה</button><input id="txSearch" placeholder="חיפוש בתנועות…"><select id="txKind"><option value="">כל הסוגים</option><option value="income">הכנסות</option><option value="expense">הוצאות</option><option value="saving">חיסכון</option><option value="transfer">העברות</option><option value="debt">החזר חוב</option></select><select id="txSort"><option value="date_desc">תאריך: חדש לישן</option><option value="date_asc">תאריך: ישן לחדש</option><option value="category">לפי קטגוריה</option><option value="amount_desc">סכום: גבוה לנמוך</option><option value="amount_asc">סכום: נמוך לגבוה</option></select><button class="ghost" data-action="exportCsv">ייצוא CSV</button><label class="ghost upload">ייבוא CSV<input id="csvFile" type="file" accept=".csv" hidden></label></div><div class="card table-wrap" id="txList"></div>`
 }
+function budgetWorkspace(){
+ ensureMonthBudget(selectedMonth);
+ let manualCats=db.categories.filter(c=>c.kind==='expense'),actualByCat=new Map(manualCats.map(c=>[c.id,monthTx(selectedMonth).filter(t=>t.kind==='expense'&&t.category===c.id).reduce((s,t)=>s+t.amount,0)])),remainingByCat=new Map(manualCats.map(c=>[c.id,budgetFor(selectedMonth,c.id)-(actualByCat.get(c.id)||0)])),sortMode=db.settings.budgetSort||'manual',cats=[...manualCats];
+ if(sortMode==='spent_desc')cats.sort((a,b)=>actualByCat.get(b.id)-actualByCat.get(a.id));if(sortMode==='spent_asc')cats.sort((a,b)=>actualByCat.get(a.id)-actualByCat.get(b.id));
+ if(sortMode==='remaining_desc')cats.sort((a,b)=>remainingByCat.get(b.id)-remainingByCat.get(a.id));if(sortMode==='remaining_asc')cats.sort((a,b)=>remainingByCat.get(a.id)-remainingByCat.get(b.id));
+ return `<section class="card budget-categories-card combined-budget-panel"><div class="card-head budget-head"><div><span class="section-kicker">התקציב של ${monthName(selectedMonth)}</span><h3>קטגוריות התקציב</h3><small class="muted">כמה נשאר, כמה יצא ומה היה היעד בכל קטגוריה</small></div><div class="budget-tools"><label class="sort-label">סידור<select id="budgetSort"><option value="manual" ${sortMode==='manual'?'selected':''}>הסדר הידני שלי</option><option value="remaining_desc" ${sortMode==='remaining_desc'?'selected':''}>הכי הרבה נשאר תחילה</option><option value="remaining_asc" ${sortMode==='remaining_asc'?'selected':''}>הכי מעט נשאר / חריגה תחילה</option><option value="spent_desc" ${sortMode==='spent_desc'?'selected':''}>ההוצאה הגבוהה תחילה</option><option value="spent_asc" ${sortMode==='spent_asc'?'selected':''}>ההוצאה הנמוכה תחילה</option></select></label><button class="ghost" data-action="setIronBudget">תקציב ברזל</button><button class="ghost" data-action="applyIronBudget">החלת הברזל</button><button class="primary" data-action="setBudget">עריכת החודש</button></div></div><div class="budget-grid">${cats.map((c,index)=>{let planned=budgetFor(selectedMonth,c.id),actual=actualByCat.get(c.id)||0,p=planned?Math.min(100,actual/planned*100):actual?100:0,over=actual>planned,remaining=planned-actual,label=over?(planned?'חריגה':'חריגה ללא יעד'):'נשאר',displayAmount=over?(planned?actual-planned:actual):remaining;return `<article class="budget-card ${over?'overspent':'within-budget'}" ${sortMode==='manual'?'draggable="true"':''} data-cat-id="${c.id}"><div class="budget-card-head"><span><i class="dot" style="background:${c.color}"></i><b>${esc(c.name)}</b></span>${sortMode==='manual'?'<span class="drag-handle" aria-label="שינוי סדר">⋮⋮</span>':''}</div><div class="budget-remaining ${over?'over':'ok'}"><small>${label}</small><strong>${money(displayAmount)}</strong></div><div class="budget-facts"><span><small>הוצאתי בפועל</small><b>${money(actual)}</b></span><span><small>היעד החודשי</small><b>${money(planned)}</b></span></div><div class="progress budget-progress" aria-label="${label} ${money(displayAmount)}"><i style="width:${p}%;background:${over?'var(--red)':c.color}"></i></div>${sortMode==='manual'?`<div class="mobile-order"><button data-action="moveCatUp" data-id="${c.id}" ${index===0?'disabled':''} aria-label="הזזה למעלה">↑</button><button data-action="moveCatDown" data-id="${c.id}" ${index===cats.length-1?'disabled':''} aria-label="הזזה למטה">↓</button></div>`:''}</article>`}).join('')}</div></section>`
+}
+function bindBudgetWorkspace(){
+ let sort=$('#budgetSort');if(!sort)return;
+ sort.onchange=e=>{db.settings.budgetSort=e.target.value;save('סדר התקציב עודכן')};
+ if((db.settings.budgetSort||'manual')==='manual')bindCategoryDrag()
+}
 function forecastPanel(){
- let f=forecast(selectedMonth),recs=recurringInMonth(selectedMonth),events=[...monthTx(selectedMonth).map(x=>({date:x.date,name:x.note||cat(x.category).name,amount:x.amount,kind:x.kind,status:'בוצע'})),...recs.filter(r=>r.isFuture).map(r=>({date:selectedMonth+'-'+String(r.day).padStart(2,'0'),name:r.name,amount:r.amount,kind:r.kind,status:'צפוי'}))].sort((a,b)=>a.date.localeCompare(b.date));
- return `<div class="grid stats section-space math-cards"><div class="card stat"><small>הכנסה צפויה</small><strong class="up">${money(f.projectedIncome)}</strong></div><div class="math-symbol">−</div><div class="card stat"><small>הוצאה צפויה</small><strong class="down">${money(f.projectedExpense)}</strong></div><div class="math-symbol">−</div><div class="card stat"><small>מטרות פעילות</small><strong>${money(f.goalCommit)}</strong></div><div class="math-symbol">=</div><div class="card hero-card stat"><small>צפי לסוף החודש</small><strong dir="ltr">${signedMoney(f.free)}</strong></div></div><div class="grid two section-space"><div class="card"><div class="card-head"><div><h3>ציר הזמן של החודש</h3><small class="muted">תנועות שבוצעו ומה שעוד צפוי</small></div></div><div class="timeline-list">${events.length?events.map(e=>`<div class="timeline-row"><time><b>${new Date(e.date+'T12:00').toLocaleDateString('he-IL',{day:'2-digit'})}</b><small>${new Date(e.date+'T12:00').toLocaleDateString('he-IL',{month:'short'})}</small></time><div class="grow"><b>${esc(e.name)}</b><small class="muted">${e.status}</small></div><strong class="${e.kind==='income'?'up':'down'}" dir="ltr">${e.kind==='income'?money(e.amount):signedMoney(-e.amount)}</strong></div>`).join(''):empty('⌁','אין עדיין תנועות','הוסף תנועות כדי לקבל תחזית')}</div></div><div class="card"><h3>פירוש התחזית</h3><div class="forecast-formula math-ltr"><span>${money(f.projectedIncome)}<small>הכנסות</small></span><b>−</b><span>${money(f.projectedExpense)}<small>הוצאות</small></span><b>−</b><span>${money(f.goalCommit)}<small>מטרות</small></span><b>=</b><span class="${f.free>=0?'up':'down'}" dir="ltr">${signedMoney(f.free)}<small>צפי</small></span></div>${insights(selectedMonth).map(x=>`<div class="insight">${x}</div>`).join('')}</div></div>`
+ let f=forecast(selectedMonth);
+ return `<div class="planning-workspace"><section class="forecast-summary"><div class="forecast-summary-head"><div><span class="section-kicker">תחזית החודש</span><h3>כך צפוי להסתיים החודש</h3></div><small>הכנסות פחות הוצאות ומטרות</small></div><div class="grid stats math-cards compact-forecast"><div class="card stat"><small>הכנסה צפויה</small><strong class="up">${money(f.projectedIncome)}</strong></div><div class="math-symbol">−</div><div class="card stat"><small>הוצאה צפויה</small><strong class="down">${money(f.projectedExpense)}</strong></div><div class="math-symbol">−</div><div class="card stat"><small>מטרות פעילות</small><strong>${money(f.goalCommit)}</strong></div><div class="math-symbol">=</div><div class="card hero-card stat"><small>צפי לסוף החודש</small><strong dir="ltr">${signedMoney(f.free)}</strong></div></div></section>${budgetWorkspace()}</div>`
 }
 function drawCombinedTransactions(){
  let list=$('#txList'),sort=$('#txSort');if(!list||!sort)return;let rows=sortedTransactions(monthTx(selectedMonth),sort.value);
@@ -525,10 +537,10 @@ function drawCombinedTransactions(){
 }
 function filterCombinedTransactions(){let search=$('#txSearch'),kind=$('#txKind');if(!search||!kind)return;let q=search.value.toLowerCase(),k=kind.value;$$('#txList tbody tr').forEach(r=>r.hidden=!!((q&&!r.dataset.search.includes(q))||(k&&r.dataset.kind!==k)))}
 function cashflow(){
- heading('תזרים ותנועות','כל מה שקרה ומה שצפוי — במקום אחד');let t=totals(selectedMonth),out=t.expense+t.saving+t.debt,balance=t.income-out;
- $('#view').innerHTML=`${monthPicker()}<div class="grid three flow-actuals section-space"><div class="card stat"><small>הכנסות בפועל</small><strong class="up">${money(t.income)}</strong></div><div class="card stat"><small>יצא בפועל</small><strong class="down" dir="ltr">${signedMoney(-out)}</strong></div><div class="card ${balance<0?'warning-card':'hero-card'} stat"><small>מאזן בפועל</small><strong dir="ltr">${signedMoney(balance)}</strong></div></div><div class="segmented section-space"><button class="${flowView==='transactions'?'active':''}" data-flow-tab="transactions">תנועות ועריכה</button><button class="${flowView==='forecast'?'active':''}" data-flow-tab="forecast">תחזית החודש</button></div>${flowView==='transactions'?combinedTransactionsPanel():forecastPanel()}`;
+ heading('תקציב ותזרים','התנועות, התחזית והתקציב החודשי במקום אחד');let t=totals(selectedMonth),out=t.expense+t.saving+t.debt,balance=t.income-out;
+ $('#view').innerHTML=`${monthPicker()}<div class="grid three flow-actuals section-space"><div class="card stat"><small>הכנסות בפועל</small><strong class="up">${money(t.income)}</strong></div><div class="card stat"><small>יצא בפועל</small><strong class="down" dir="ltr">${signedMoney(-out)}</strong></div><div class="card ${balance<0?'warning-card':'hero-card'} stat"><small>מאזן בפועל</small><strong dir="ltr">${signedMoney(balance)}</strong></div></div><div class="segmented section-space combined-tabs"><button class="${flowView==='transactions'?'active':''}" data-flow-tab="transactions">תנועות ועריכה</button><button class="${flowView==='forecast'?'active':''}" data-flow-tab="forecast">תקציב ותחזית</button></div>${flowView==='transactions'?combinedTransactionsPanel():forecastPanel()}`;
  $$('[data-flow-tab]').forEach(b=>b.onclick=()=>{flowView=b.dataset.flowTab;render()});
- if(flowView==='transactions'){drawCombinedTransactions();$('#txSearch').oninput=filterCombinedTransactions;$('#txKind').onchange=filterCombinedTransactions;$('#txSort').onchange=drawCombinedTransactions;$('#csvFile').onchange=importCsv}
+ if(flowView==='transactions'){drawCombinedTransactions();$('#txSearch').oninput=filterCombinedTransactions;$('#txKind').onchange=filterCombinedTransactions;$('#txSort').onchange=drawCombinedTransactions;$('#csvFile').onchange=importCsv}else bindBudgetWorkspace()
 }
 
 function budget(){
@@ -596,14 +608,14 @@ function decorateSmartUi(){
  }
 }
 function decorateBudgetCards(){
- if(current!=='budget')return;
+ if(current!=='budget'&&!(current==='cashflow'&&flowView==='forecast'))return;
  $$('.budget-card[data-cat-id]').forEach(card=>{
   const id=card.dataset.catId,planned=budgetFor(selectedMonth,id),actual=monthTx(selectedMonth).filter(t=>t.kind==='expense'&&t.category===id).reduce((s,t)=>s+t.amount,0),over=actual>planned;
   card.classList.toggle('overspent',over);
   card.classList.toggle('within-budget',!over)
  })
 }
-function importData(e){let r=new FileReader;r.onload=()=>{try{db=migrate(JSON.parse(r.result));persist();render();toast('הגיבוי שוחזר ושודרג ל־HON v14')}catch{alert('קובץ הגיבוי אינו תקין')}};r.readAsText(e.target.files[0])}
+function importData(e){let r=new FileReader;r.onload=()=>{try{db=migrate(JSON.parse(r.result));persist();render();toast('הגיבוי שוחזר ושודרג ל־HON v15')}catch{alert('קובץ הגיבוי אינו תקין')}};r.readAsText(e.target.files[0])}
 function importCsv(e){let r=new FileReader;r.onload=()=>{try{let lines=r.result.replace(/^\ufeff/,'').split(/\r?\n/).filter(Boolean),head=parseCsv(lines.shift()).map(x=>x.toLowerCase()),count=0;for(let line of lines){let v=parseCsv(line),o=Object.fromEntries(head.map((h,i)=>[h,v[i]||'']));if(!o.date||!o.amount)continue;let c=db.categories.find(x=>x.name===o.category);if(!c&&o.category){c={id:uid(),name:o.category,kind:o.kind==='income'?'income':'expense',color:'#718096'};db.categories.push(c)}db.transactions.push({id:uid(),date:o.date.slice(0,10),kind:o.kind||'expense',amount:+o.amount,category:c?.id,note:o.note||'',reviewed:false});count++}save(`${count} תנועות יובאו`)}catch{alert('לא הצלחנו לקרוא את הקובץ')}};r.readAsText(e.target.files[0])}
 function parseCsv(line){let out=[],cur='',q=false;for(let i=0;i<line.length;i++){let c=line[i];if(c==='"'&&line[i+1]==='"'){cur+='"';i++}else if(c==='"')q=!q;else if(c===','&&!q){out.push(cur);cur=''}else cur+=c}out.push(cur);return out}
 function toast(s){let t=$('#toast');t.textContent=s;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
