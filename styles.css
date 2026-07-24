@@ -148,3 +148,81 @@ h1{font-size:32px;line-height:1.18;letter-spacing:-.8px}
 @media(max-width:390px){
  .debt-stats{grid-template-columns:minmax(0,1fr)}.compact-forecast{grid-template-columns:minmax(0,1fr)}.debt-facts{grid-template-columns:minmax(0,1fr)}.mobile-overview-metrics b{font-size:10px}.review-stepper button b{font-size:6.5px}.wallet-expiry-alert{display:grid;grid-template-columns:auto 1fr}.wallet-expiry-alert .ghost{grid-column:1/-1;width:100%}
 }
+
+/* HON v17.1 — focused interface cleanup */
+aside>.profile{margin-top:auto}
+.maturity-chip{display:none!important}
+
+.wealth-summary-pro{gap:14px}
+.wealth-summary-pro .stat{min-height:132px}
+.wealth-net-card{box-shadow:0 16px 38px rgba(16,42,50,.16)}
+.wealth-liability-stat{border-top:3px solid color-mix(in srgb,var(--red) 72%,#fff)}
+.wealth-workspace{padding:26px;border:1px solid var(--line);border-radius:24px;background:var(--card);box-shadow:var(--shadow)}
+.wealth-workspace-head{display:flex;align-items:center;justify-content:space-between;gap:20px;padding-bottom:22px;border-bottom:1px solid var(--line)}
+.wealth-workspace-head h2{margin:3px 0 4px;font-size:22px}
+.wealth-workspace-head p{max-width:620px;margin:0;color:var(--muted);font-size:11px;line-height:1.6}
+.wealth-groups-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:15px;margin-top:18px}
+.wealth-panel{min-width:0;padding:19px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(145deg,var(--card),color-mix(in srgb,var(--mint) 23%,var(--card)));box-shadow:0 8px 24px rgba(28,46,64,.045)}
+.wealth-panel-liability{background:linear-gradient(145deg,var(--card),color-mix(in srgb,#fff0f1 40%,var(--card)));border-color:color-mix(in srgb,var(--red) 22%,var(--line))}
+.wealth-panel-head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.wealth-panel-head>div{display:flex;align-items:center;gap:10px;min-width:0}
+.wealth-panel-head h3{margin:0;font-size:15px}
+.wealth-panel-head small{display:block;margin-top:2px;color:var(--muted);font-size:9px}
+.wealth-panel-head>strong{font-size:15px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.wealth-panel-icon{width:34px;height:34px;flex:0 0 34px;display:grid;place-items:center;border-radius:11px;background:var(--mint);color:var(--green-dark);font-weight:900}
+.wealth-panel-liability .wealth-panel-icon{background:#fff0f1;color:var(--red)}
+.wealth-panel .account-row{grid-template-columns:minmax(120px,1fr) auto auto auto;padding:13px 2px}
+.wealth-panel .account-row>div{min-width:0}
+.wealth-panel .account-row b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wealth-panel .account-row>strong{font-size:12px}
+.wealth-empty-state{min-height:82px;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--muted);font-size:11px}
+.wealth-empty-state span{width:27px;height:27px;display:grid;place-items:center;border-radius:9px;background:var(--surface-low);color:var(--green)}
+
+.dark .wealth-workspace,.dark .wealth-panel{background:var(--card)}
+.dark .wealth-panel-liability{background:linear-gradient(145deg,var(--card),#261d21);border-color:#513039}
+.dark .wealth-liability-stat{border-top-color:#9a4650}
+
+@media(max-width:1000px){
+ .wealth-groups-grid{grid-template-columns:minmax(0,1fr)}
+}
+
+@media(max-width:720px){
+ .wealth-summary-pro{gap:9px}
+ .wealth-summary-pro .stat{min-height:105px}
+ .wealth-workspace{padding:15px;border-radius:20px}
+ .wealth-workspace-head{display:grid;gap:14px;padding-bottom:16px}
+ .wealth-workspace-head h2{font-size:19px}
+ .wealth-workspace-head .primary{width:100%;min-height:44px}
+ .wealth-groups-grid{gap:10px;margin-top:13px}
+ .wealth-panel{padding:14px;border-radius:16px}
+ .wealth-panel-head{align-items:flex-start}
+ .wealth-panel-head>strong{font-size:13px}
+ .wealth-panel .account-row{grid-template-columns:minmax(0,1fr) auto!important;gap:8px!important}
+ .wealth-panel .account-row .liquidity{grid-column:1;grid-row:2;justify-self:start}
+ .wealth-panel .account-row strong{grid-column:2;grid-row:1;text-align:left!important}
+ .wealth-panel .account-row button{grid-column:2;grid-row:2;min-width:62px}
+
+ /* Month-close controls belong to the document flow, so no content is covered. */
+ .review-stage{padding-bottom:12px}
+ .review-stage-actions,.review-form-actions{
+  position:static!important;
+  bottom:auto!important;
+  z-index:auto!important;
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:8px;
+  margin-top:4px;
+  padding:0!important;
+  border:0!important;
+  border-radius:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  backdrop-filter:none!important;
+  -webkit-backdrop-filter:none!important
+ }
+ .review-stage-actions>span{display:block!important;grid-column:1/-1;line-height:1.5}
+ .review-stage-actions>button,.review-form-actions>button{width:100%;min-height:44px}
+ .review-stage-actions>button:only-of-type{grid-column:1/-1}
+ .review-reflection{margin-bottom:8px}
+ .review-complete{margin-bottom:16px}
+}
