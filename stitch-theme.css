@@ -68,16 +68,17 @@ body.stitch-app>aside{
  padding:0 8px 24px!important;
  border-bottom:1px solid var(--st-mid);
 }
-.stitch-family-avatar{
+.stitch-brandmark{
  width:44px!important;
  height:44px!important;
  flex:0 0 44px;
- border-radius:50%!important;
- background:var(--st-primary-fixed)!important;
- color:var(--st-primary)!important;
- border:2px solid var(--st-primary);
+ border-radius:14px!important;
+ background:linear-gradient(145deg,#26c794,#0b8f68)!important;
+ color:#fff!important;
+ border:0;
  font-weight:800;
- font-size:13px!important;
+ font-size:22px!important;
+ box-shadow:0 8px 20px rgba(22,162,119,.28);
 }
 .stitch-family b{display:block;color:var(--st-primary);font-size:15px}
 .stitch-family small{display:block;color:var(--st-muted)!important;font-size:11px}
@@ -190,6 +191,11 @@ body.stitch-app>main{
  width:40px;height:40px;display:grid;place-items:center;border-radius:50%;
  background:var(--st-primary-fixed);color:var(--st-primary);font-weight:800;
 }
+.stitch-mobile-brandmark,.stitch-overview-brandmark{
+ width:42px;height:42px;flex:0 0 42px;border-radius:13px;display:grid;place-items:center;
+ background:linear-gradient(145deg,#26c794,#0b8f68);color:#fff;font-size:22px;font-weight:800;
+ box-shadow:0 8px 20px rgba(22,162,119,.24);
+}
 .stitch-mobile-header h1{margin:0;color:var(--st-primary);font-size:25px;line-height:1}
 .stitch-sync{
  width:40px;height:40px;border:0;border-radius:50%;background:transparent;color:var(--st-primary);
@@ -208,16 +214,32 @@ body.stitch-app>main{
 }
 
 /* Overview */
+.stitch-overview-heading{
+ display:flex;align-items:center;gap:14px;margin:0 2px 22px;padding:0;background:transparent;
+}
+.stitch-overview-heading small{display:block;color:var(--st-primary);font-size:10px;font-weight:800;letter-spacing:.05em}
+.stitch-overview-heading h1{margin:2px 0 1px;color:var(--st-ink);font-size:25px;line-height:1.25}
+.stitch-overview-heading p{margin:0;color:var(--st-muted);font-size:11px}
 .stitch-dashboard-grid{
  display:grid;
- grid-template-columns:minmax(0,1fr) 330px;
- gap:30px;
+ width:100%;
+ grid-template-columns:repeat(12,minmax(0,1fr));
+ grid-template-areas:
+  "hero hero hero hero hero hero hero balances balances balances balances balances"
+  "month month month month month month month month advice advice advice advice"
+  "activity activity activity activity activity activity activity activity wallets wallets wallets wallets";
+ gap:20px;
  align-items:start;
  direction:rtl;
 }
 .stitch-dashboard-main,.stitch-dashboard-rail{min-width:0;direction:rtl}
-.stitch-dashboard-main{display:grid;gap:20px}
-.stitch-dashboard-rail{display:grid;gap:26px}
+.stitch-dashboard-main,.stitch-dashboard-rail{display:contents}
+.stitch-net-hero{grid-area:hero}
+.stitch-balance-grid{grid-area:balances}
+.stitch-month-card{grid-area:month}
+.stitch-advice-section{grid-area:advice}
+.stitch-activity-section{grid-area:activity}
+.stitch-wallet-section{grid-area:wallets}
 .stitch-net-hero{
  position:relative;
  overflow:hidden;
@@ -242,9 +264,12 @@ body.stitch-app>main{
  display:inline-flex;align-items:center;gap:3px;padding:4px 8px;border-radius:999px;
  background:#003c2c;color:#74e9bc;font-size:10px;
 }
-.stitch-balance-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.stitch-balance-grid{
+ display:grid;grid-template-columns:1fr;grid-template-rows:1fr 1fr;gap:12px;
+ height:100%;align-self:stretch;
+}
 .stitch-balance-card{
- position:relative;min-height:94px;padding:18px 20px;border:0;border-radius:14px;
+ position:relative;min-height:91px;padding:18px 20px;border:0;border-radius:14px;
  background:#fff;box-shadow:var(--st-shadow);text-align:right;cursor:pointer;
 }
 .stitch-balance-card small{display:block;color:var(--st-muted);font-size:10px;font-weight:700}
@@ -315,6 +340,8 @@ body.stitch-app>main{
  width:42px;height:42px;border:0;border-radius:50%;background:var(--st-primary-soft);color:var(--st-primary);
  display:grid;place-items:center;cursor:pointer;
 }
+.stitch-section-actions{display:flex;align-items:center;gap:7px}
+.stitch-section-actions .stitch-section-link{display:inline-flex}
 
 /* Budget & flow */
 .stitch-page-top{
@@ -562,7 +589,17 @@ body.stitch-app>main{
  body.stitch-app{grid-template-columns:240px minmax(0,1fr)}
  body.stitch-app>aside{width:240px}
  body.stitch-app>main{padding-inline:24px}
- .stitch-dashboard-grid{grid-template-columns:minmax(0,1fr) 280px;gap:20px}
+ .stitch-dashboard-grid{
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  grid-template-areas:
+   "hero hero"
+   "balances balances"
+   "month month"
+   "advice advice"
+   "activity activity"
+   "wallets wallets";
+ }
+ .stitch-balance-grid{grid-template-columns:1fr 1fr;grid-template-rows:1fr;height:auto}
  .stitch-month-summary{grid-template-columns:220px repeat(3,minmax(0,1fr))}
  .stitch-budget-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
@@ -573,15 +610,22 @@ body.stitch-app>main{
  body.stitch-app>main{
   display:block;max-width:none;width:100%;padding:8px 14px calc(94px + env(safe-area-inset-bottom));overflow:visible;
  }
- .stitch-app #view{width:100%;max-width:650px}
+ .stitch-app #view{width:100%;max-width:none}
  .stitch-mobile-header{display:flex}
  .stitch-page-top{display:none}
- .stitch-dashboard-grid{display:flex;flex-direction:column;gap:20px}
+ .stitch-overview-heading{display:block;width:100%;margin:4px 0 16px;padding:2px 2px 0}
+ .stitch-overview-heading .stitch-overview-brandmark{display:none}
+ .stitch-overview-heading h1{font-size:23px;margin-top:3px}
+ .stitch-overview-heading p{font-size:11px;line-height:1.45}
+ .stitch-dashboard,.stitch-dashboard-grid{width:100%;max-width:none;min-width:0}
+ .stitch-dashboard-grid{display:flex;flex-direction:column;align-items:stretch;gap:20px}
  .stitch-dashboard-main,.stitch-dashboard-rail{display:contents}
+ .stitch-net-hero,.stitch-balance-grid,.stitch-month-card,.stitch-advice-section,
+ .stitch-wallet-section,.stitch-activity-section{width:100%;max-width:100%;min-width:0}
  .stitch-net-hero{order:1;min-height:132px;padding:18px 20px}
  .stitch-net-hero strong{font-size:29px}
  .stitch-net-trend{margin-top:13px}
- .stitch-balance-grid{order:2;gap:10px}
+ .stitch-balance-grid{order:2;grid-template-columns:1fr 1fr;grid-template-rows:1fr;height:auto;gap:10px}
  .stitch-balance-card{min-height:78px;padding:14px}
  .stitch-balance-card strong{font-size:18px}
  .stitch-month-card{order:3;padding:17px}
@@ -662,6 +706,9 @@ body.stitch-app>main{
 
 @media(max-width:430px){
  body.stitch-app>main{padding-inline:12px}
+ .stitch-overview-heading h1{font-size:21px}
+ .stitch-balance-card{padding:13px 11px}
+ .stitch-balance-card strong{font-size:clamp(14px,4.5vw,18px);white-space:nowrap}
  .stitch-advice-grid{grid-template-columns:1fr 1fr}
  .stitch-advice-card p{font-size:9px}
  .stitch-wallet-compact-list{grid-template-columns:1fr 1fr}

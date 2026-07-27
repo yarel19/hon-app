@@ -23,7 +23,7 @@ function stitchInitials(){
  return value||'H'
 }
 function stitchMobileHeader(title,action=''){
- return `<header class="stitch-mobile-header"><div class="stitch-title-row"><span class="stitch-mobile-avatar">${esc(stitchInitials())}</span><h1>${esc(title)}</h1></div>${action||`<button class="stitch-sync" type="button" data-sync-now title="סנכרון">${stitchIcon('sync')}</button>`}</header>`
+ return `<header class="stitch-mobile-header"><div class="stitch-title-row"><span class="stitch-mobile-brandmark">H</span><h1>${esc(title)}</h1></div>${action||`<button class="stitch-sync" type="button" data-sync-now title="סנכרון">${stitchIcon('sync')}</button>`}</header>`
 }
 function stitchSectionTitle(title,link='',page=''){
  return `<div class="stitch-section-title"><h2>${esc(title)}</h2>${link?`<button type="button" class="stitch-section-link" ${page?`data-page="${page}"`:''}>${esc(link)} ${stitchIcon('chevron_left')}</button>`:''}</div>`
@@ -65,8 +65,8 @@ function stitchAccountIcon(a){
 }
 
 nav=function(){
- let name=db.settings.name||'יראל כברה',family=document.querySelector('.stitch-family b'),avatar=document.querySelector('.stitch-family-avatar');
- if(family)family.textContent=name;if(avatar)avatar.textContent=stitchInitials();
+ let name=db.settings.name||'יראל כברה',family=document.querySelector('.stitch-family b');
+ if(family)family.textContent=name;
  $('#nav').innerHTML=stitchPages.map(([id,icon,label],i)=>`<button type="button" class="stitch-nav-btn ${id===current?'active':''} ${id==='settings'?'settings-link':''}" data-page="${id}">${stitchIcon(icon)}<span>${label}</span></button>`).join('');
  $('#mobileNav').innerHTML=stitchPages.filter(x=>stitchPrimary.includes(x[0])).map(([id,icon,label])=>`<button type="button" class="stitch-mobile-nav-btn ${id===current?'active':''}" data-page="${id}">${stitchIcon(icon)}<span>${label}</span></button>`).join('')+`<button type="button" class="stitch-mobile-nav-btn ${!stitchPrimary.includes(current)?'active':''}" id="mobileMore">${stitchIcon('menu')}<span>עוד</span></button>`
 };
@@ -86,11 +86,15 @@ function stitchBindCommon(){
 
 dashboard=function(){
  heading('סקירה','תמונה קצרה וברורה של החודש');
- let net=liveAssets()-liveLiabilities(),change=stitchNetChange(net),t=totals(monthKey()),out=t.expense+t.saving+t.debt,remaining=t.income-out,max=Math.max(1,t.income,out),recent=[...db.transactions].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,4),advice=professionalInsights(monthKey()).slice(0,2),wallets=db.wallets.slice(0,2);
+ let firstName=(db.settings.name||'').trim().split(/\s+/)[0]||'שלום',net=liveAssets()-liveLiabilities(),change=stitchNetChange(net),t=totals(monthKey()),out=t.expense+t.saving+t.debt,remaining=t.income-out,max=Math.max(1,t.income,out),recent=[...db.transactions].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,4),advice=professionalInsights(monthKey()).slice(0,2),wallets=db.wallets.slice(0,2);
  let adviceHtml=advice.map((x,i)=>`<article class="stitch-advice-card ${i===1?'blue':''}"><span class="stitch-advice-icon">${stitchIcon(i===0?'restaurant':'savings')}</span><div><h3>${esc(x.title)}</h3><p>${esc(x.action||x.text)}</p></div></article>`).join('');
  let walletHtml=wallets.map(w=>`<article class="stitch-wallet-compact" data-action="editWallet" data-id="${w.id}"><span class="stitch-wallet-logo" style="--wallet-color:${walletColor(w)}">${walletInitial(w.walletType)}</span><span><b>${esc(w.name||walletTypeName(w.walletType))}</b><small>${walletTypeName(w.walletType)}</small></span><strong>${money(w.balance)}</strong></article>`).join('');
  $('#view').innerHTML=`<section class="stitch-page stitch-dashboard">
-  ${stitchMobileHeader('העושר המשפחתי')}
+  ${stitchMobileHeader('HON')}
+  <header class="stitch-overview-heading">
+   <span class="stitch-overview-brandmark">H</span>
+   <div><small>הסקירה שלך</small><h1>שלום ${esc(firstName)}, זו התמונה הפיננסית שלך</h1><p>סקירה קצרה וברורה של מצב המשפחה — כל מה שחשוב במקום אחד.</p></div>
+  </header>
   <div class="stitch-dashboard-grid">
    <div class="stitch-dashboard-main">
     <article class="stitch-net-hero"><small>הון נקי</small><strong>${money(net)}</strong><div class="stitch-net-trend"><b>${change==null?'נתונים חיים':`${change>=0?'+':''}${numberAmount(change)}% ↗`}</b><span>${change==null?'מתעדכן מכל הנכסים והחובות':'החודש האחרון'}</span></div></article>
@@ -104,7 +108,7 @@ dashboard=function(){
      <div class="stitch-month-line out"><span>הוצאות / חיסכון / חובות</span><strong>${money(out)}</strong><div class="stitch-line-progress"><i style="width:${Math.min(100,out/max*100)}%"></i></div></div>
      <div class="stitch-month-total"><span>נשאר לניהול</span><strong dir="ltr">${signedMoney(remaining)}</strong></div>
     </article>
-    <section class="stitch-activity-section">${stitchSectionTitle('פעילות אחרונה','צפה בכל הפעולות','cashflow')}<button type="button" class="stitch-add-circle" data-action="addTx">${stitchIcon('add')}</button><div class="stitch-activity-card">${recent.length?recent.map(x=>stitchTxRow(x)).join(''):empty('＋','מתחילים מכאן','הוסף תנועה ראשונה')}</div></section>
+    <section class="stitch-activity-section"><div class="stitch-section-title"><h2>פעילות אחרונה</h2><div class="stitch-section-actions"><button type="button" class="stitch-section-link" data-page="cashflow">כל הפעולות ${stitchIcon('chevron_left')}</button><button type="button" class="stitch-add-circle" data-action="addTx" aria-label="הוספת תנועה">${stitchIcon('add')}</button></div></div><div class="stitch-activity-card">${recent.length?recent.map(x=>stitchTxRow(x)).join(''):empty('＋','מתחילים מכאן','הוסף תנועה ראשונה')}</div></section>
    </div>
    <aside class="stitch-dashboard-rail">
     <section class="stitch-advice-section">${stitchSectionTitle('הצעות ייעול') }<div class="stitch-advice-grid">${adviceHtml||'<p class="muted">לאחר הוספת תנועות יוצגו כאן המלצות.</p>'}</div></section>
