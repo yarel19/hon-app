@@ -1,4 +1,4 @@
-/* HON Stitch UI v21
+/* HON Stitch UI v22
  * Visual layer based on the user's exported Google Stitch screens.
  * The data model, persistence and Supabase synchronization remain in app.js/cloud.js.
  */
@@ -94,7 +94,7 @@ dashboard=function(){
  heading('סקירה','תמונה קצרה וברורה של החודש');
  let net=liveAssets()-liveLiabilities(),change=stitchNetChange(net),t=totals(monthKey()),out=t.expense+t.saving+t.debt,remaining=t.income-out,max=Math.max(1,t.income,out),recent=[...db.transactions].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,4),advice=professionalInsights(monthKey()).slice(0,2),wallets=db.wallets.slice(0,2);
  let adviceHtml=advice.map((x,i)=>`<article class="stitch-advice-card ${i===1?'blue':''}"><span class="stitch-advice-icon">${stitchIcon(i===0?'restaurant':'savings')}</span><div class="stitch-advice-copy"><h3>${esc(x.title)}</h3>${x.text?`<p>${esc(x.text)}</p>`:''}${x.action?`<strong>${esc(x.action)}</strong>`:''}</div></article>`).join('');
- let walletHtml=wallets.map(w=>`<article class="stitch-wallet-compact" data-action="editWallet" data-id="${w.id}"><span class="stitch-wallet-logo" style="--wallet-color:${walletColor(w)}">${walletInitial(w.walletType)}</span><span class="stitch-wallet-copy"><b>${esc(w.name||walletTypeName(w.walletType))}</b><small>${walletTypeName(w.walletType)}</small></span><strong dir="ltr">${money(w.balance)}</strong></article>`).join('');
+ let walletHtml=wallets.map(w=>`<article class="stitch-wallet-compact" style="--wallet-color:${walletColor(w)}" data-action="editWallet" data-id="${w.id}"><span class="stitch-wallet-logo" style="--wallet-color:${walletColor(w)}">${walletInitial(w.walletType)}</span><span class="stitch-wallet-copy"><b>${esc(w.name||walletTypeName(w.walletType))}</b><small>${walletTypeName(w.walletType)}</small></span><strong dir="ltr">${money(w.balance)}</strong></article>`).join('');
  let trend=change==null?'נתונים חיים':`${change>=0?'+':'−'}${numberAmount(Math.abs(change))}% ↗`;
  $('#view').innerHTML=`<section class="stitch-page stitch-dashboard">
   ${stitchMobileHeader('HON')}
@@ -103,7 +103,7 @@ dashboard=function(){
   </header>
   <div class="stitch-dashboard-grid">
    <div class="stitch-dashboard-main">
-    <article class="stitch-net-hero"><small>הון נקי</small><strong>${money(net)}</strong><div class="stitch-net-trend"><b dir="ltr">${trend}</b><span>${change==null?'מתעדכן מכל הנכסים והחובות':'לעומת החודש האחרון'}</span></div></article>
+    <article class="stitch-net-hero ${change!=null&&change<0?'declining':''}"><small>הון נקי</small><strong>${money(net)}</strong><div class="stitch-net-trend"><b dir="ltr">${trend}</b><span>${change==null?'מתעדכן מכל הנכסים והחובות':'לעומת החודש האחרון'}</span></div></article>
     <div class="stitch-balance-grid">
      <button type="button" class="stitch-balance-card bank" data-action="correctBank"><span class="stitch-balance-icon">${stitchIcon('account_balance')}</span><span class="stitch-balance-copy"><small>עו״ש עכשיו</small><strong dir="ltr">${money(subtypeBalance('bank'))}</strong></span><span class="stitch-balance-edit" aria-hidden="true">${stitchIcon('edit')}</span></button>
      <button type="button" class="stitch-balance-card cash" data-action="correctCash"><span class="stitch-balance-icon">${stitchIcon('payments')}</span><span class="stitch-balance-copy"><small>מזומן נגיש</small><strong dir="ltr">${money(subtypeBalance('cash'))}</strong></span><span class="stitch-balance-edit" aria-hidden="true">${stitchIcon('edit')}</span></button>
@@ -112,7 +112,7 @@ dashboard=function(){
      <div class="stitch-month-head"><span class="stitch-month-icon">${stitchIcon('calendar_month')}</span><div><small>החודש הנוכחי</small><h2>סיכום חודש ${new Date(monthKey()+'-15').toLocaleDateString('he-IL',{month:'long'})}</h2></div></div>
      <div class="stitch-month-line income"><span>הכנסות</span><strong>${money(t.income)}</strong><div class="stitch-line-progress"><i style="width:${Math.min(100,t.income/max*100)}%"></i></div></div>
      <div class="stitch-month-line out"><span>הוצאות / חיסכון / חובות</span><strong>${money(out)}</strong><div class="stitch-line-progress"><i style="width:${Math.min(100,out/max*100)}%"></i></div></div>
-     <div class="stitch-month-total"><span>נשאר לניהול</span><strong dir="ltr">${signedMoney(remaining)}</strong></div>
+     <div class="stitch-month-total ${remaining<0?'negative':''}"><span>נשאר לניהול</span><strong dir="ltr">${signedMoney(remaining)}</strong></div>
     </article>
     <section class="stitch-activity-section"><div class="stitch-section-title"><h2>פעילות אחרונה</h2><div class="stitch-section-actions"><button type="button" class="stitch-section-link" data-page="cashflow">כל הפעולות ${stitchIcon('chevron_left')}</button><button type="button" class="stitch-add-circle" data-action="addTx" aria-label="הוספת תנועה">${stitchIcon('add')}</button></div></div><div class="stitch-activity-card">${recent.length?recent.map(x=>stitchTxRow(x)).join(''):empty('＋','מתחילים מכאן','הוסף תנועה ראשונה')}</div></section>
    </div>

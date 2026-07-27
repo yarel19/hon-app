@@ -921,3 +921,297 @@ body.stitch-app>main{padding:27px 30px 96px}
  .stitch-dashboard .stitch-section-title h2{font-size:17px!important}
  .stitch-activity-row strong{font-size:11.5px}
 }
+
+/* v22 — restrained luxury color system */
+:root{
+ --st-primary:#087a5b;
+ --st-primary-container:#0b8a68;
+ --st-primary-fixed:#8af0c9;
+ --st-primary-soft:#e1f3ed;
+ --st-blue:#3867c8;
+ --st-blue-soft:#eaf0ff;
+ --st-red:#d95763;
+ --st-red-soft:#fff0f1;
+ --st-gold:#c99a3d;
+ --st-gold-soft:#fff7e6;
+ --st-teal:#16a085;
+ --st-navy:#102a32;
+ --st-bg:#f4f8f8;
+ --st-surface:#ffffff;
+ --st-shadow:0 14px 38px rgba(29,55,65,.075),0 2px 8px rgba(29,55,65,.035);
+ --st-shadow-sm:0 7px 22px rgba(29,55,65,.06);
+}
+html{background:var(--st-bg)}
+body.stitch-app{
+ background:
+  radial-gradient(circle at 11% 5%,rgba(56,103,200,.055),transparent 25%),
+  radial-gradient(circle at 79% 2%,rgba(22,160,133,.065),transparent 27%),
+  linear-gradient(180deg,#f8fbfb 0%,var(--st-bg) 52%,#f3f7f8 100%);
+ background-attachment:fixed;
+}
+body.stitch-app>aside{
+ background:linear-gradient(180deg,rgba(255,255,255,.98),rgba(250,253,252,.98));
+ box-shadow:-8px 0 30px rgba(32,58,67,.025);
+}
+.stitch-brandmark,.stitch-mobile-brandmark{
+ background:linear-gradient(145deg,#2cc79a 0%,#087a5b 62%,#075c47 100%)!important;
+ box-shadow:0 10px 24px rgba(8,122,91,.25),inset 0 1px 0 rgba(255,255,255,.24);
+}
+.stitch-nav-btn.active{
+ background:linear-gradient(90deg,#e7f5f0 0%,#dff2eb 100%);
+ box-shadow:inset -3px 0 0 var(--st-primary);
+}
+.stitch-app .primary{
+ background:linear-gradient(135deg,#0c8c69,#087a5b);
+ box-shadow:0 7px 18px rgba(8,122,91,.16),inset 0 1px 0 rgba(255,255,255,.16);
+ transition:transform .18s ease,box-shadow .18s ease,filter .18s ease;
+}
+.stitch-app .primary:hover{background:linear-gradient(135deg,#0a835f,#066c50);filter:saturate(1.04)}
+.stitch-app .card{border:1px solid rgba(188,202,193,.28)}
+
+.stitch-overview-heading small{
+ display:inline-flex;align-items:center;gap:6px;color:var(--st-primary);
+}
+.stitch-overview-heading small:before{
+ content:"";width:18px;height:3px;border-radius:99px;background:linear-gradient(90deg,var(--st-gold),var(--st-primary));
+}
+.stitch-overview-heading h1{letter-spacing:-.35px}
+
+.stitch-net-hero{
+ isolation:isolate;
+ border:1px solid rgba(138,240,201,.11);
+ background:
+  radial-gradient(circle at 4% 105%,rgba(22,160,133,.28),transparent 41%),
+  radial-gradient(circle at 94% -10%,rgba(56,103,200,.16),transparent 34%),
+  linear-gradient(135deg,#142d34 0%,#10272e 48%,#0d2027 100%);
+ box-shadow:0 20px 48px rgba(16,42,50,.18),inset 0 1px 0 rgba(255,255,255,.05);
+}
+.stitch-net-hero:before{
+ content:"";position:absolute;z-index:2;inset:0 0 auto 0;height:3px;
+ background:linear-gradient(90deg,var(--st-gold),#4fd5a8 52%,var(--st-blue));
+ opacity:.9;
+}
+.stitch-net-hero:after{background:rgba(79,213,168,.09)}
+.stitch-net-hero small{color:#b9cbc6}
+.stitch-net-hero strong{
+ color:#63e1b1;text-shadow:0 8px 28px rgba(56,215,162,.12);
+}
+.stitch-net-trend b{
+ background:rgba(7,92,71,.72);border:1px solid rgba(138,240,201,.12);
+ color:#91f0ca;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);
+}
+.stitch-net-hero.declining strong{color:#ff9ca4}
+.stitch-net-hero.declining .stitch-net-trend b{
+ background:rgba(122,37,47,.48);border-color:rgba(255,156,164,.15);color:#ffc0c5;
+}
+
+.stitch-balance-card{
+ --card-accent:var(--st-primary);
+ overflow:hidden;border:1px solid rgba(188,202,193,.34);
+ background:
+  radial-gradient(circle at 0 0,color-mix(in srgb,var(--card-accent) 8%,transparent),transparent 38%),
+  linear-gradient(145deg,#fff,#fbfdfd);
+ box-shadow:var(--st-shadow-sm);
+ transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease;
+}
+.stitch-balance-card.bank{--card-accent:var(--st-blue)}
+.stitch-balance-card.cash{--card-accent:var(--st-teal)}
+.stitch-balance-card:before{
+ content:"";position:absolute;right:0;top:13px;bottom:13px;width:3px;border-radius:5px 0 0 5px;
+ background:linear-gradient(180deg,color-mix(in srgb,var(--card-accent) 65%,#fff),var(--card-accent));
+}
+.stitch-balance-icon{
+ background:color-mix(in srgb,var(--card-accent) 11%,#fff)!important;color:var(--card-accent)!important;
+ box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--card-accent) 11%,transparent);
+}
+.stitch-balance-card.bank strong{color:var(--st-blue)}
+.stitch-balance-card.cash strong{color:var(--st-teal)}
+.stitch-balance-edit{color:color-mix(in srgb,var(--card-accent) 45%,var(--st-muted))}
+
+.stitch-month-card{
+ position:relative;overflow:hidden;border:1px solid rgba(188,202,193,.3);
+ background:linear-gradient(145deg,#fff 0%,#fdfefe 100%);
+}
+.stitch-month-card:before{
+ content:"";position:absolute;inset:0 0 auto 0;height:3px;
+ background:linear-gradient(90deg,var(--st-teal),var(--st-blue),var(--st-gold));
+ opacity:.78;
+}
+.stitch-month-icon{
+ background:linear-gradient(145deg,#e9f6f1,#dff1ea);color:var(--st-primary);
+ box-shadow:inset 0 0 0 1px rgba(8,122,91,.07);
+}
+.stitch-month-line.income strong{color:var(--st-teal)}
+.stitch-month-line.income .stitch-line-progress i{background:linear-gradient(90deg,#0b876a,#23b798)}
+.stitch-month-line.out strong{color:var(--st-red)}
+.stitch-month-line.out .stitch-line-progress i{background:linear-gradient(90deg,#bc4652,#e36973)}
+.stitch-month-total strong{color:var(--st-primary)}
+.stitch-month-total.negative strong{color:var(--st-red)}
+
+.stitch-dashboard .stitch-section-title h2{
+ display:flex;align-items:center;gap:8px;
+}
+.stitch-dashboard .stitch-section-title h2:before{
+ content:"";width:4px;height:18px;border-radius:99px;background:linear-gradient(180deg,var(--st-gold),var(--st-primary));
+}
+.stitch-advice-card{
+ position:relative;overflow:hidden;
+ background:linear-gradient(145deg,#e9f7f2,#dff1eb);
+ box-shadow:0 8px 24px rgba(8,122,91,.055);
+}
+.stitch-advice-card.blue{
+ background:linear-gradient(145deg,#eef3ff,#e5edff);
+ box-shadow:0 8px 24px rgba(56,103,200,.05);
+}
+.stitch-advice-card:after{
+ content:"";position:absolute;left:-24px;bottom:-35px;width:82px;height:82px;border-radius:50%;
+ background:rgba(8,122,91,.045);pointer-events:none;
+}
+.stitch-advice-card.blue:after{background:rgba(56,103,200,.045)}
+.stitch-advice-icon{
+ background:linear-gradient(145deg,rgba(8,122,91,.15),rgba(255,255,255,.54));
+ box-shadow:inset 0 0 0 1px rgba(8,122,91,.08);
+}
+.stitch-advice-card.blue .stitch-advice-icon{
+ background:linear-gradient(145deg,rgba(56,103,200,.14),rgba(255,255,255,.54));
+}
+
+.stitch-wallet-compact{
+ position:relative;overflow:hidden;
+ border-color:color-mix(in srgb,var(--wallet-color) 16%,var(--st-mid));
+ background:
+  radial-gradient(circle at 0 50%,color-mix(in srgb,var(--wallet-color) 7%,transparent),transparent 43%),
+  var(--st-surface);
+ transition:transform .2s ease,border-color .2s ease,box-shadow .2s ease;
+}
+.stitch-wallet-compact:before{
+ content:"";position:absolute;right:0;top:12px;bottom:12px;width:3px;border-radius:4px 0 0 4px;
+ background:var(--wallet-color);
+}
+.stitch-wallet-logo{
+ background:linear-gradient(145deg,color-mix(in srgb,var(--wallet-color) 78%,#fff),var(--wallet-color));
+ box-shadow:0 7px 16px color-mix(in srgb,var(--wallet-color) 20%,transparent),inset 0 1px 0 rgba(255,255,255,.25);
+}
+.stitch-activity-card{
+ border-color:rgba(188,202,193,.3);
+ background:linear-gradient(145deg,#fff,#fdfefe);
+}
+.stitch-activity-row{transition:background .16s ease,transform .16s ease}
+.stitch-tx-icon{
+ box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tx-color) 10%,transparent);
+}
+.stitch-activity-row strong.income{color:var(--st-teal)}
+.stitch-add-circle{
+ background:linear-gradient(145deg,#e1f4ed,#d4eee5);
+ box-shadow:0 6px 16px rgba(8,122,91,.1),inset 0 0 0 1px rgba(8,122,91,.06);
+ transition:transform .18s ease,box-shadow .18s ease;
+}
+
+/* The same palette continues through the rest of the application */
+.stitch-forecast{
+ background:
+  radial-gradient(circle at 5% 100%,rgba(56,103,200,.18),transparent 38%),
+  linear-gradient(135deg,#0d8b68,#087a5b 58%,#075f49);
+}
+.stitch-budget-card,.stitch-wealth-metric,.stitch-wealth-chart-card,
+.stitch-wallet-card,.stitch-goal-card,.stitch-debt-card,.stitch-review-card{
+ border:1px solid rgba(188,202,193,.28);
+ box-shadow:var(--st-shadow-sm);
+}
+.stitch-goal-card{border-top:3px solid var(--st-gold)}
+.stitch-goal-progress i{background:linear-gradient(90deg,#b98322,#dfb75f)}
+.stitch-debt-card{border-top:3px solid color-mix(in srgb,var(--st-red) 76%,#fff)}
+.stitch-debt-hero{
+ background:
+  radial-gradient(circle at 0 100%,rgba(217,87,99,.17),transparent 38%),
+  linear-gradient(135deg,#1a3036,#102a32);
+}
+.stitch-goal-card .term{background:var(--st-gold-soft);color:#8c661d}
+.stitch-positive-pill{background:var(--st-primary-soft);color:var(--st-primary)}
+
+@keyframes stitchRise{
+ from{opacity:0;transform:translateY(8px)}
+ to{opacity:1;transform:translateY(0)}
+}
+@keyframes stitchProgress{
+ from{transform:scaleX(0)}
+ to{transform:scaleX(1)}
+}
+.stitch-net-hero,.stitch-balance-grid,.stitch-month-card,.stitch-advice-section,
+.stitch-wallet-section,.stitch-activity-section{
+ animation:stitchRise .42s cubic-bezier(.2,.72,.2,1) both;
+}
+.stitch-balance-grid{animation-delay:.035s}
+.stitch-month-card{animation-delay:.07s}
+.stitch-advice-section{animation-delay:.1s}
+.stitch-wallet-section{animation-delay:.13s}
+.stitch-activity-section{animation-delay:.16s}
+.stitch-line-progress i,.stitch-budget-progress i,.stitch-goal-progress i{
+ transform-origin:right center;animation:stitchProgress .65s cubic-bezier(.2,.72,.2,1) both;
+}
+
+@media(hover:hover) and (pointer:fine){
+ .stitch-balance-card:hover,.stitch-wallet-compact:hover{
+  transform:translateY(-2px);box-shadow:0 15px 32px rgba(29,55,65,.1);
+ }
+ .stitch-activity-row:hover{transform:translateX(-2px)}
+ .stitch-add-circle:hover{transform:translateY(-2px) rotate(4deg);box-shadow:0 9px 20px rgba(8,122,91,.16)}
+ .stitch-app .primary:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(8,122,91,.2)}
+}
+
+.dark{
+ --st-primary:#62d9ad;
+ --st-primary-container:#087a5b;
+ --st-primary-soft:#153c32;
+ --st-blue:#84a8ff;
+ --st-blue-soft:#1b2d50;
+ --st-red:#ff929b;
+ --st-red-soft:#47252c;
+ --st-gold:#e4bb67;
+ --st-gold-soft:#3d321d;
+ --st-teal:#6de0c4;
+ --st-navy:#0c1d22;
+ --st-bg:#0b171a;
+ --st-surface:#122326;
+ --st-low:#102024;
+ --st-shadow:none;
+ --st-shadow-sm:none;
+}
+.dark body.stitch-app{
+ background:
+  radial-gradient(circle at 10% 3%,rgba(56,103,200,.11),transparent 26%),
+  radial-gradient(circle at 78% 0,rgba(22,160,133,.11),transparent 28%),
+  linear-gradient(180deg,#0d1b1e,var(--st-bg));
+}
+.dark body.stitch-app>aside{background:linear-gradient(180deg,#102225,#0d1d20)}
+.dark .stitch-nav-btn.active{background:linear-gradient(90deg,#173d34,#15362f);box-shadow:inset -3px 0 0 #62d9ad}
+.dark .stitch-balance-card{
+ background:
+  radial-gradient(circle at 0 0,color-mix(in srgb,var(--card-accent) 9%,transparent),transparent 40%),
+  linear-gradient(145deg,#14282b,#112326);
+ border-color:var(--st-high);
+}
+.dark .stitch-balance-icon{background:color-mix(in srgb,var(--card-accent) 15%,#122326)!important}
+.dark .stitch-month-card,.dark .stitch-activity-card{
+ background:linear-gradient(145deg,#14282b,#112326);border-color:var(--st-high);
+}
+.dark .stitch-month-icon{background:linear-gradient(145deg,#173a32,#132e29)}
+.dark .stitch-advice-card{background:linear-gradient(145deg,#173a32,#14312c)}
+.dark .stitch-advice-card.blue{background:linear-gradient(145deg,#1c3154,#182a48)}
+.dark .stitch-wallet-compact{
+ background:
+  radial-gradient(circle at 0 50%,color-mix(in srgb,var(--wallet-color) 9%,transparent),transparent 43%),
+  var(--st-surface);
+}
+.dark .stitch-goal-card .term{background:var(--st-gold-soft);color:var(--st-gold)}
+.dark .stitch-positive-pill{background:var(--st-primary-soft);color:var(--st-primary)}
+
+@media(max-width:820px){
+ body.stitch-app{background-attachment:scroll}
+ .stitch-net-hero{box-shadow:0 13px 30px rgba(16,42,50,.15)}
+ .stitch-balance-card,.stitch-month-card,.stitch-activity-card{box-shadow:0 7px 22px rgba(29,55,65,.055)}
+}
+
+@media(prefers-reduced-motion:reduce){
+ .stitch-app *{animation-duration:.001ms!important;animation-delay:0ms!important;transition-duration:.001ms!important}
+}
