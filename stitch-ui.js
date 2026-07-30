@@ -138,7 +138,7 @@ function stitchBudgetCards(){
 function stitchForecastView(){
  let f=forecast(selectedMonth),mode=db.settings.budgetSort||'manual';
  return `<section class="stitch-forecast stitch-forecast-v23">
-   <header class="stitch-forecast-heading"><span>${stitchIcon('monitoring')}</span><div><h2>תחזית לסוף החודש</h2><p>מבוססת על ההכנסות, ההוצאות והמטרות שתוכננו.</p></div></header>
+   <header class="stitch-forecast-heading"><div class="stitch-forecast-copy"><h2>תחזית לסוף החודש</h2><p>מבוססת על ההכנסות, ההוצאות והמטרות שתוכננו.</p></div><span class="material-symbols-outlined stitch-forecast-icon" aria-hidden="true">monitoring</span></header>
    <div class="stitch-forecast-equation">
     <div class="stitch-forecast-factor income"><small>הכנסה צפויה</small><strong>${money(f.projectedIncome)}</strong></div>
     <b class="stitch-forecast-operator">-</b>
