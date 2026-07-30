@@ -29,7 +29,7 @@ const categoryIconCatalog=[
 const fixedExpenseWords=['שכר דירה','שכירות','משכנתא','ארנונה','ועד בית','ביטוח','הלוואה','חשבון','חשבונות','חשמל','מים','גז','גן','גנים','מעון','צהרון','אינטרנט','טלפון','סלולר','מנוי'];
 
 const defaults={
- version:17,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
+ version:17,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],budgetFlexTransfers:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
  settings:{name:'יראל',currency:'ILS',onboarded:false,budgetSort:'manual'},
 };
 const defaultCategories=[
@@ -66,7 +66,7 @@ function categoryIconName(c={}){
 }
 function migrate(raw){
  let d={...structuredClone(defaults),...(raw||{})};
- for(const k of ['transactions','accounts','wallets','categories','budgets','monthPlans','goals','debts','recurring','snapshots','reviews'])if(!Array.isArray(d[k]))d[k]=[];
+ for(const k of ['transactions','accounts','wallets','categories','budgets','budgetFlexTransfers','monthPlans','goals','debts','recurring','snapshots','reviews'])if(!Array.isArray(d[k]))d[k]=[];
  if(!d.categories.length)d.categories=defaultCategories;
  d.settings={...defaults.settings,...(d.settings||{})};
  const migrationTime=new Date().toISOString();
@@ -74,6 +74,7 @@ function migrate(raw){
  d.wallets=d.wallets.map(w=>{let walletType=w.walletType||(/bit/i.test(w.name||'')?'bit':/(paybox|פייבוקס)/i.test(w.name||'')?'paybox':'other');return{...w,balance:+w.balance||0,walletType,color:w.color||walletPalette[walletType]||walletPalette.other,expiryDate:w.expiryDate||''}});
  d.transactions=d.transactions.map(t=>({...t,amount:+t.amount||0,kind:t.kind||'expense',reviewed:t.reviewed??true,createdAt:t.createdAt||null}));
  d.categories=d.categories.map(c=>({...c,icon:c.icon==='apparel'?'checkroom':c.icon||'',budgetBehavior:['fixed','variable'].includes(c.budgetBehavior)?c.budgetBehavior:'auto'}));
+ d.budgetFlexTransfers=d.budgetFlexTransfers.map(x=>({...x,amount:Math.max(0,Math.round((+x.amount||0)*100)/100),type:x.type==='allocate'?'allocate':'collect',createdAt:x.createdAt||migrationTime})).filter(x=>x.id&&x.month&&x.amount>0);
  d.debts=d.debts.map(x=>{let balance=+x.balance||0;return{...x,balance,interest:+x.interest||0,payment:+x.payment||0,originalBalance:+x.originalBalance||balance,lender:x.lender||''}});
  d.ironBudget=d.ironBudget&&Array.isArray(d.ironBudget.categories)?d.ironBudget:{income:0,categories:[]};
  d.goals=d.goals.map(g=>{let hadNewSchedule=!!(g.startMonth||g.deadlineMonth),startMonth=g.startMonth||monthKey(),deadlineMonth=g.deadlineMonth||(g.date||'').slice(0,7),term=g.term||(monthsInclusive(startMonth,deadlineMonth)&&monthsInclusive(startMonth,deadlineMonth)<=24?'short':'long');return{...g,target:+g.target||0,current:+g.current||0,monthly:+g.monthly||0,startMonth,deadlineMonth,calculationMode:g.calculationMode||(hadNewSchedule?'auto':'manual'),moneyLocation:g.moneyLocation||'',term}});
@@ -89,6 +90,34 @@ const totals=(m=selectedMonth)=>monthTx(m).reduce((a,t)=>{if(t.kind==='income')a
 const sumAccounts=type=>db.accounts.filter(a=>a.type===type).reduce((s,a)=>s+a.balance,0);
 const budgetFor=(m,c)=>db.budgets.find(b=>b.month===m&&b.category===c)?.amount||0;
 const planFor=m=>db.monthPlans.find(p=>p.month===m)||{month:m,income:0};
+const roundBudgetAmount=value=>Math.round((+value||0)*100)/100;
+function budgetSpentFor(m,category){
+ return roundBudgetAmount(monthTx(m).filter(t=>t.kind==='expense'&&t.category===category).reduce((sum,t)=>sum+(+t.amount||0),0))
+}
+function setBudgetAmount(m,category,amount){
+ let row=db.budgets.find(b=>b.month===m&&b.category===category),value=Math.max(0,roundBudgetAmount(amount));
+ if(row)row.amount=value;
+ else db.budgets.push({month:m,category,amount:value});
+ return value
+}
+function adjustBudgetAmount(m,category,change){
+ return setBudgetAmount(m,category,budgetFor(m,category)+roundBudgetAmount(change))
+}
+function flexFundEntries(m=selectedMonth){
+ return db.budgetFlexTransfers.filter(x=>x.month===m).sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''))
+}
+function flexFundBalance(m=selectedMonth){
+ return roundBudgetAmount(flexFundEntries(m).reduce((sum,x)=>sum+(x.type==='collect'?x.amount:-x.amount),0))
+}
+function flexAvailableForCategory(category,m=selectedMonth){
+ return Math.max(0,roundBudgetAmount(budgetFor(m,category)-budgetSpentFor(m,category)))
+}
+function flexCollectedForCategory(category,m=selectedMonth){
+ return roundBudgetAmount(flexFundEntries(m).filter(x=>x.type==='collect'&&x.sourceCategory===category).reduce((sum,x)=>sum+x.amount,0))
+}
+function flexAllocatedForCategory(category,m=selectedMonth){
+ return roundBudgetAmount(flexFundEntries(m).filter(x=>x.type==='allocate'&&x.targetCategory===category).reduce((sum,x)=>sum+x.amount,0))
+}
 function recurringInMonth(m){
  let nowDay=new Date().getDate(),isCurrent=m===monthKey();
  return db.recurring.filter(r=>r.active!==false).map(r=>({...r,isFuture:!isCurrent||+r.day>=nowDay}));
@@ -103,6 +132,7 @@ function forecast(m=selectedMonth){
  let uncategorized=monthTx(m).filter(t=>t.kind==='expense'&&!cats.some(c=>c.id===t.category)).reduce((s,t)=>s+t.amount,0);
  let futureUncat=recs.filter(r=>r.isFuture&&r.kind==='expense'&&!cats.some(c=>c.id===r.category)).reduce((s,r)=>s+r.amount,0);
  projectedExpense+=uncategorized+futureUncat;
+ projectedExpense+=Math.max(0,flexFundBalance(m));
  let plannedIncome=Math.max(actual.income+recs.filter(r=>r.isFuture&&r.kind==='income').reduce((s,r)=>s+r.amount,0),planFor(m).income);
  let goalCommit=goalMonthlyTotal(m);
  return{actualIncome:actual.income,actualExpense:actual.expense,projectedIncome:plannedIncome,projectedExpense,goalCommit,free:plannedIncome-projectedExpense-goalCommit};
@@ -249,7 +279,7 @@ function settings(){
 }
 
 function modal(title,html,onSubmit){
- $('#modalTitle').textContent=title;$('#form').innerHTML=html;$('#modal').hidden=false;
+ $('#modal').classList.remove('stitch-flex-modal');$('#modalTitle').textContent=title;$('#form').innerHTML=html;$('#modal').hidden=false;
  $('#form').onsubmit=e=>{e.preventDefault();onSubmit(Object.fromEntries(new FormData(e.target)));$('#modal').hidden=true}
 }
 const field={
@@ -487,7 +517,7 @@ function budget(){
  $('#view').innerHTML=`${monthPicker()}<div class="grid three section-space"><div class="card stat"><small>הכנסה מתוכננת</small><strong>${money(plan.income)}</strong></div><div class="card stat"><small>הוקצה להוצאות ולמטרות</small><strong>${money(allocated)}</strong></div><div class="card ${left<0?'warning-card':'hero-card'} stat"><small>נותר להקצאה</small><strong>${money(left)}</strong></div></div><div class="card section-space"><div class="card-head"><div><h3>קטגוריות התקציב</h3><small class="muted">החודש הנוכחי ניתן לשינוי בלי לפגוע בתקציב הברזל</small></div><div><button class="ghost" data-action="setIronBudget">תקציב ברזל</button> <button class="ghost" data-action="applyIronBudget">החלת הברזל החודש</button> <button class="primary" data-action="setBudget">עריכת החודש</button></div></div><div class="budget-grid">${cats.map((c,index)=>{let planned=budgetFor(selectedMonth,c.id),actual=monthTx().filter(t=>t.kind==='expense'&&t.category===c.id).reduce((s,t)=>s+t.amount,0),p=planned?Math.min(100,actual/planned*100):0;return `<article class="budget-card" draggable="true" data-cat-id="${c.id}"><div class="budget-card-head"><span><i class="dot" style="background:${c.color}"></i><b>${esc(c.name)}</b></span><span class="drag-handle">⋮⋮</span></div><div class="budget-values"><strong>${money(actual)}</strong><span class="budget-out-of">מתוך ${money(planned)}</span><b class="${actual>planned&&planned?'down':''}">${planned?(actual/planned*100).toFixed(1):'0.0'}%</b></div><div class="progress"><i style="width:${p}%;background:${actual>planned&&planned?'var(--red)':c.color}"></i></div><small>נשאר ${money(Math.max(0,planned-actual))}</small><div class="mobile-order"><button data-action="moveCatUp" data-id="${c.id}">↑</button><button data-action="moveCatDown" data-id="${c.id}">↓</button></div></article>`}).join('')}</div></div>`;bindCategoryDrag()
 }
 actions.setIronBudget=()=>{let cats=db.categories.filter(c=>c.kind==='expense'),iron=db.ironBudget;modal('תקציב הברזל',`<p class="muted">זו תבנית הבסיס שממנה יתחיל כל חודש חדש.</p><div class="form-grid"><label class="full">הכנסה חודשית קבועה<input name="_income" type="number" min="0" value="${iron.income||''}"></label>${cats.map(c=>`<label>${esc(c.name)}<input name="${c.id}" type="number" min="0" value="${iron.categories.find(x=>x.category===c.id)?.amount||''}"></label>`).join('')}</div>${field.actions}`,x=>{db.ironBudget={income:+x._income||0,categories:Object.entries(x).filter(([k])=>k!=='_income').map(([category,amount])=>({category,amount:+amount||0}))};save('תקציב הברזל נשמר')})};
-actions.applyIronBudget=()=>{if(!db.ironBudget.categories.length)return toast('תחילה הגדר תקציב ברזל');if(confirm('להחליף את תקציב החודש בתקציב הברזל? התנועות לא יימחקו.')){db.budgets=db.budgets.filter(b=>b.month!==selectedMonth);db.budgets.push(...db.ironBudget.categories.map(x=>({month:selectedMonth,...x})));db.monthPlans=db.monthPlans.filter(p=>p.month!==selectedMonth);db.monthPlans.push({month:selectedMonth,income:db.ironBudget.income});save('תקציב הברזל הוחל על החודש')}};
+actions.applyIronBudget=()=>{if(!db.ironBudget.categories.length)return toast('תחילה הגדר תקציב ברזל');let hasFlex=flexFundEntries(selectedMonth).length,message=`להחליף את תקציב החודש בתקציב הברזל? התנועות לא יימחקו.${hasFlex?' קופת הגמישות של החודש תאופס.':''}`;if(confirm(message)){db.budgets=db.budgets.filter(b=>b.month!==selectedMonth);db.budgets.push(...db.ironBudget.categories.map(x=>({month:selectedMonth,...x})));db.monthPlans=db.monthPlans.filter(p=>p.month!==selectedMonth);db.monthPlans.push({month:selectedMonth,income:db.ironBudget.income});db.budgetFlexTransfers=db.budgetFlexTransfers.filter(x=>x.month!==selectedMonth);save('תקציב הברזל הוחל על החודש')}};
 
 function wealth(){
  heading('הון עצמי','נכסים והתחייבויות - ללא ארנקים דיגיטליים');let assets=db.accounts.filter(a=>a.type==='asset'),liabs=db.accounts.filter(a=>a.type==='liability'),net=liveAssets()-liveLiabilities(),history=[...db.snapshots].sort((a,b)=>a.month.localeCompare(b.month)),liquid=assets.filter(a=>a.liquid).reduce((s,a)=>s+effectiveBalance(a),0);

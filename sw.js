@@ -1,4 +1,4 @@
-const CACHE='hon-stitch-v25';
+const CACHE='hon-stitch-v26';
 const ASSETS=['./','index.html','fonts.css?v=24','styles.css?v=24','stitch-theme.css?v=24','cloud.js?v=24','app.js?v=24','stitch-ui.js?v=24','manifest.webmanifest','icon.svg','fonts/heebo-hebrew-400-normal.woff2','fonts/heebo-hebrew-500-normal.woff2','fonts/heebo-hebrew-600-normal.woff2','fonts/heebo-hebrew-700-normal.woff2','fonts/heebo-hebrew-800-normal.woff2','fonts/heebo-latin-400-normal.woff2','fonts/heebo-latin-500-normal.woff2','fonts/heebo-latin-600-normal.woff2','fonts/heebo-latin-700-normal.woff2','fonts/heebo-latin-800-normal.woff2','fonts/material-symbols-outlined.woff2'];
 self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)))});
 self.addEventListener('activate',event=>event.waitUntil(Promise.all([self.clients.claim(),caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key))))])));

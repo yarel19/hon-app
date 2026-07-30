@@ -1,4 +1,4 @@
-/* HON Stitch UI v24
+/* HON Stitch UI v26
  * Visual layer based on the user's exported Google Stitch screens.
  * The data model, persistence and Supabase synchronization remain in app.js/cloud.js.
  */
@@ -127,28 +127,84 @@ function stitchBudgetCards(){
  if(mode==='remaining_desc')rows.sort((a,b)=>remaining.get(b.id)-remaining.get(a.id));
  if(mode==='remaining_asc')rows.sort((a,b)=>remaining.get(a.id)-remaining.get(b.id));
  return rows.map((c,index)=>{
-  let target=budgetFor(selectedMonth,c.id),spent=actual.get(c.id)||0,left=target-spent,over=spent>target,pct=target?Math.min(100,spent/target*100):spent?100:0;
+  let target=budgetFor(selectedMonth,c.id),spent=actual.get(c.id)||0,left=target-spent,over=spent>target,pct=target?Math.min(100,spent/target*100):spent?100:0,collected=flexCollectedForCategory(c.id),allocated=flexAllocatedForCategory(c.id),flexNote=allocated?`נוספו ${money(allocated)} מקופת הגמישות`:collected?`שוחררו ${money(collected)} לקופת הגמישות`:'';
   return `<article class="stitch-budget-card budget-card ${over?'over overspent':'within-budget'}" style="--cat-color:${c.color}" data-cat-id="${c.id}" ${mode==='manual'?'draggable="true"':''}>
-   <div class="stitch-budget-card-head"><div class="stitch-budget-title"><span class="stitch-budget-category-icon" style="--cat-color:${c.color}">${stitchIcon(categoryIconName(c))}</span><div><h3>${esc(c.name)}</h3><span class="stitch-budget-state">${over?stitchIcon('warning'):''}${over?(target?`חריגה של ${money(Math.abs(left))}`:`חריגה ללא יעד: ${money(spent)}`):`נשאר ${money(left)}`}</span></div></div><div><strong>${money(spent)}</strong><small>מתוך ${money(target)}</small></div></div>
+   <div class="stitch-budget-card-head"><div class="stitch-budget-title"><span class="stitch-budget-category-icon" style="--cat-color:${c.color}">${stitchIcon(categoryIconName(c))}</span><div><h3>${esc(c.name)}</h3><span class="stitch-budget-state">${over?stitchIcon('warning'):''}${over?(target?`חריגה של ${money(Math.abs(left))}`:`חריגה ללא יעד: ${money(spent)}`):`נשאר ${money(left)}`}</span>${flexNote?`<span class="stitch-budget-flex-note ${allocated?'received':'released'}">${flexNote}</span>`:''}</div></div><div><strong>${money(spent)}</strong><small>מתוך ${money(target)}</small></div></div>
    <div class="stitch-budget-progress"><i style="width:${pct}%"></i></div>
    ${mode==='manual'?`<div class="stitch-order-buttons"><button type="button" data-action="moveCatUp" data-id="${c.id}" ${index===0?'disabled':''}>↑</button><button type="button" data-action="moveCatDown" data-id="${c.id}" ${index===rows.length-1?'disabled':''}>↓</button></div>`:''}
   </article>`
  }).join('')
 }
+function stitchFlexHistoryText(entry){
+ if(entry.type==='collect')return `נאספו ${money(entry.amount)} מתוך ${esc(cat(entry.sourceCategory).name)}`;
+ return `הועברו ${money(entry.amount)} אל ${esc(cat(entry.targetCategory).name)}`
+}
+function stitchFlexFundCard(){
+ let entries=flexFundEntries(selectedMonth),balance=flexFundBalance(selectedMonth),collected=entries.filter(x=>x.type==='collect').reduce((sum,x)=>sum+x.amount,0),allocated=entries.filter(x=>x.type==='allocate').reduce((sum,x)=>sum+x.amount,0),latest=entries.slice(-2).reverse();
+ return `<section class="stitch-flex-fund">
+  <div class="stitch-flex-copy"><span>מרחב התמרון של החודש</span><h2>קופת הגמישות</h2><p>אוספים יתרות שסיימו את תפקידן ומחלקים אותן מחדש בלי לשנות את הכסף בבנק.</p></div>
+  <div class="stitch-flex-balance"><small>זמין לחלוקה עכשיו</small><strong>${money(balance)}</strong><span>${entries.length?`נאספו ${money(collected)} · חולקו ${money(allocated)}`:'הקופה עדיין ריקה'}</span></div>
+  <div class="stitch-flex-actions">
+   <button type="button" class="primary" data-action="collectFlex">איסוף יתרות</button>
+   <button type="button" class="ghost" data-action="allocateFlex" ${balance<=0?'disabled':''}>חלוקה מחדש</button>
+   <button type="button" class="stitch-flex-history-button" data-action="flexHistory" ${entries.length?'':'disabled'}>היסטוריה</button>
+  </div>
+  ${latest.length?`<div class="stitch-flex-latest">${latest.map(x=>`<span>${stitchFlexHistoryText(x)}</span>`).join('')}</div>`:''}
+ </section>`
+}
+function stitchOpenFlexCollector(){
+ ensureMonthBudget(selectedMonth);
+ let choices=db.categories.filter(c=>c.kind==='expense').map(c=>({category:c,available:flexAvailableForCategory(c.id)})).filter(x=>x.available>.009);
+ if(!choices.length)return toast('אין כרגע יתרות זמינות לאיסוף');
+ modal('איסוף יתרות לקופה',`<div class="stitch-flex-modal-intro"><b>${monthName(selectedMonth)}</b><p>בחר את הקטגוריות שסיימו את תפקידן. אפשר לקחת את כל היתרה או סכום מדויק בלבד.</p></div><div class="stitch-flex-select-toolbar"><span>${choices.length} קטגוריות זמינות</span><button type="button" id="flexSelectAll">בחירת כל היתרות</button></div><div class="stitch-flex-collector">${choices.map(({category,available})=>`<article class="stitch-flex-collect-row" data-flex-category="${category.id}" data-flex-max="${available}"><label class="stitch-flex-collect-main"><input type="checkbox" class="stitch-flex-check"><i></i><span><b>${esc(category.name)}</b><small>יתרה זמינה ${money(available)}</small></span></label><div class="stitch-flex-collect-amount"><label><span>כמה להעביר?</span><input class="stitch-flex-amount-input" type="number" inputmode="decimal" min="0.01" max="${available}" step="0.01" placeholder="0" disabled></label><button type="button" class="stitch-flex-all-button">כל היתרה</button></div><small class="stitch-flex-after">יישארו בקטגוריה ${money(available)}</small></article>`).join('')}</div><div class="stitch-flex-modal-total"><span><small>נבחר להעברה</small><strong id="flexCollectTotal">${money(0)}</strong></span><span><small>יישאר בקטגוריות</small><b id="flexRemainTotal">${money(choices.reduce((sum,x)=>sum+x.available,0))}</b></span></div><div class="form-actions full"><button class="primary">העברה לקופת הגמישות</button><button type="button" class="ghost" data-close-flex>ביטול</button></div>`,()=>{});
+ $('#modal').classList.add('stitch-flex-modal');
+ let rows=$$('.stitch-flex-collect-row'),totalAvailable=choices.reduce((sum,x)=>sum+x.available,0);
+ const refresh=()=>{
+  let selected=0;
+  rows.forEach(row=>{let checked=row.querySelector('.stitch-flex-check').checked,input=row.querySelector('.stitch-flex-amount-input'),max=+row.dataset.flexMax||0,amount=checked?Math.min(max,Math.max(0,+input.value||0)):0;row.classList.toggle('selected',checked);input.disabled=!checked;row.querySelector('.stitch-flex-after').textContent=`יישארו בקטגוריה ${money(Math.max(0,max-amount))}`;selected+=amount});
+  $('#flexCollectTotal').textContent=money(selected);$('#flexRemainTotal').textContent=money(Math.max(0,totalAvailable-selected))
+ };
+ rows.forEach(row=>{let check=row.querySelector('.stitch-flex-check'),input=row.querySelector('.stitch-flex-amount-input'),all=row.querySelector('.stitch-flex-all-button'),max=+row.dataset.flexMax||0;check.onchange=()=>{if(check.checked&&!+input.value)input.value=max;refresh()};input.oninput=refresh;all.onclick=()=>{check.checked=true;input.value=max;refresh()}});
+ $('#flexSelectAll').onclick=()=>{rows.forEach(row=>{row.querySelector('.stitch-flex-check').checked=true;row.querySelector('.stitch-flex-amount-input').value=row.dataset.flexMax});refresh()};
+ $('[data-close-flex]').onclick=()=>$('#modal').hidden=true;
+ $('#form').onsubmit=e=>{e.preventDefault();let transfers=[];rows.forEach(row=>{if(!row.querySelector('.stitch-flex-check').checked)return;let sourceCategory=row.dataset.flexCategory,max=flexAvailableForCategory(sourceCategory),amount=Math.min(max,roundBudgetAmount(row.querySelector('.stitch-flex-amount-input').value));if(amount>0)transfers.push({sourceCategory,amount})});if(!transfers.length)return toast('בחר לפחות יתרה אחת להעברה');let stamp=new Date().toISOString();transfers.forEach((x,index)=>{adjustBudgetAmount(selectedMonth,x.sourceCategory,-x.amount);db.budgetFlexTransfers.push({id:uid(),month:selectedMonth,type:'collect',sourceCategory:x.sourceCategory,amount:x.amount,createdAt:`${stamp}-${String(index).padStart(2,'0')}`})});$('#modal').hidden=true;save(`${money(transfers.reduce((sum,x)=>sum+x.amount,0))} הועברו לקופת הגמישות`)};
+ refresh()
+}
+function stitchOpenFlexAllocator(){
+ let balance=flexFundBalance(selectedMonth);
+ if(balance<=0)return toast('קופת הגמישות עדיין ריקה');
+ let targets=db.categories.filter(c=>c.kind==='expense').map(c=>{let spent=budgetSpentFor(selectedMonth,c.id),target=budgetFor(selectedMonth,c.id);return{category:c,variance:spent-target,left:target-spent}}).sort((a,b)=>(b.variance>0?b.variance:0)-(a.variance>0?a.variance:0)||a.category.name.localeCompare(b.category.name,'he'));
+ modal('חלוקה מחדש מהקופה',`<div class="stitch-flex-modal-intro"><b>בקופה זמינים ${money(balance)}</b><p>בחר לאיזו קטגוריה להעביר וכמה. תקציב היעד יתעדכן מיד.</p></div><div class="stitch-flex-allocate-form"><label>קטגוריית יעד<select name="category" id="flexTarget">${targets.map(x=>`<option value="${x.category.id}">${esc(x.category.name)} · ${x.variance>0?`חריגה ${money(x.variance)}`:`נשאר ${money(Math.max(0,x.left))}`}</option>`).join('')}</select></label><label>סכום להעברה<input name="amount" id="flexAllocateAmount" type="number" inputmode="decimal" min="0.01" max="${balance}" step="0.01" required></label><button type="button" id="flexAllocateAll">כל הקופה</button></div><div class="stitch-flex-modal-total single"><span><small>יישאר בקופה לאחר ההעברה</small><strong id="flexAllocateRemain">${money(balance)}</strong></span></div><div class="form-actions full"><button class="primary">העברה לקטגוריה</button><button type="button" class="ghost" data-close-flex>ביטול</button></div>`,()=>{});
+ $('#modal').classList.add('stitch-flex-modal');
+ let amount=$('#flexAllocateAmount'),refresh=()=>{$('#flexAllocateRemain').textContent=money(Math.max(0,flexFundBalance(selectedMonth)-Math.min(flexFundBalance(selectedMonth),+amount.value||0)))};
+ amount.oninput=refresh;$('#flexAllocateAll').onclick=()=>{amount.value=flexFundBalance(selectedMonth);refresh()};$('[data-close-flex]').onclick=()=>$('#modal').hidden=true;
+ $('#form').onsubmit=e=>{e.preventDefault();let currentBalance=flexFundBalance(selectedMonth),value=roundBudgetAmount(amount.value),target=$('#flexTarget').value;if(!target||value<=0)return toast('בחר קטגוריה וסכום');if(value>currentBalance+.009)return toast('הסכום גבוה מהיתרה בקופה');adjustBudgetAmount(selectedMonth,target,value);db.budgetFlexTransfers.push({id:uid(),month:selectedMonth,type:'allocate',targetCategory:target,amount:value,createdAt:new Date().toISOString()});$('#modal').hidden=true;save(`${money(value)} הועברו אל ${cat(target).name}`)}
+}
+function stitchUndoLastFlex(){
+ let last=flexFundEntries(selectedMonth).at(-1);
+ if(!last)return toast('אין פעולה לביטול');
+ if(last.type==='collect'){if(flexFundBalance(selectedMonth)+.009<last.amount)return toast('כדי לבטל, החזר קודם כסף שחולק מהקופה');adjustBudgetAmount(selectedMonth,last.sourceCategory,last.amount)}
+ else adjustBudgetAmount(selectedMonth,last.targetCategory,-last.amount);
+ db.budgetFlexTransfers=db.budgetFlexTransfers.filter(x=>x.id!==last.id);$('#modal').hidden=true;save('הפעולה האחרונה בקופת הגמישות בוטלה')
+}
+function stitchOpenFlexHistory(){
+ let entries=flexFundEntries(selectedMonth).slice().reverse();
+ if(!entries.length)return toast('אין עדיין פעולות בקופת הגמישות');
+ modal('היסטוריית קופת הגמישות',`<div class="stitch-flex-modal-intro"><b>${monthName(selectedMonth)}</b><p>כל מעבר נשמר כדי שתמיד יהיה ברור מאיפה הכסף הגיע ולאן חולק.</p></div><div class="stitch-flex-history-list">${entries.map(x=>`<article><span class="${x.type}">${x.type==='collect'?'איסוף':'חלוקה'}</span><div><b>${stitchFlexHistoryText(x)}</b><small>${new Date((x.createdAt||'').slice(0,24)).toLocaleString('he-IL')}</small></div><strong>${money(x.amount)}</strong></article>`).join('')}</div><div class="form-actions full"><button type="button" class="ghost" id="undoLastFlex">ביטול הפעולה האחרונה</button><button type="button" class="primary" data-close-flex>סגירה</button></div>`,()=>{});
+ $('#modal').classList.add('stitch-flex-modal');
+ $('#form').onsubmit=e=>e.preventDefault();$('[data-close-flex]').onclick=()=>$('#modal').hidden=true;$('#undoLastFlex').onclick=stitchUndoLastFlex
+}
+actions.collectFlex=stitchOpenFlexCollector;
+actions.allocateFlex=stitchOpenFlexAllocator;
+actions.flexHistory=stitchOpenFlexHistory;
+
 function stitchForecastView(){
  let f=forecast(selectedMonth),mode=db.settings.budgetSort||'manual';
- return `<section class="stitch-forecast stitch-forecast-v23">
-   <header class="stitch-forecast-heading"><div class="stitch-forecast-copy"><h2>תחזית לסוף החודש</h2><p>מבוססת על ההכנסות, ההוצאות והמטרות שתוכננו.</p></div><span class="material-symbols-outlined stitch-forecast-icon" aria-hidden="true">monitoring</span></header>
-   <div class="stitch-forecast-equation">
-    <div class="stitch-forecast-factor income"><small>הכנסה צפויה</small><strong>${money(f.projectedIncome)}</strong></div>
-    <b class="stitch-forecast-operator">-</b>
-    <div class="stitch-forecast-factor expense"><small>הוצאות צפויות</small><strong>${money(f.projectedExpense)}</strong></div>
-    <b class="stitch-forecast-operator">-</b>
-    <div class="stitch-forecast-factor goals"><small>מטרות וחיסכון</small><strong>${money(f.goalCommit)}</strong></div>
-    <b class="stitch-forecast-operator">=</b>
-    <div class="stitch-forecast-answer ${f.free<0?'negative':'positive'}"><small>צפי יתרה</small><strong dir="ltr">${signedMoney(f.free)}</strong></div>
-   </div>
+ return `<section class="stitch-forecast stitch-forecast-luxury">
+   <div class="stitch-forecast-luxury-top"><div class="stitch-forecast-luxury-copy"><span>המבט קדימה</span><h2>תחזית לסוף החודש</h2><p>תמונה שמרנית המבוססת על התקציב, התנועות, המטרות וקופת הגמישות.</p></div><div class="stitch-forecast-luxury-result ${f.free<0?'negative':'positive'}"><small>${f.free<0?'חוסר צפוי':'צפוי להישאר'}</small><strong dir="ltr">${signedMoney(f.free)}</strong></div></div>
+   <div class="stitch-forecast-breakdown"><div class="income"><span>הכנסה צפויה</span><strong>${money(f.projectedIncome)}</strong></div><div class="expense"><span>הוצאות צפויות</span><strong>${money(f.projectedExpense)}</strong></div><div class="goals"><span>מטרות וחיסכון</span><strong>${money(f.goalCommit)}</strong></div></div>
   </section>
+  ${stitchFlexFundCard()}
   <div class="stitch-budget-toolbar stitch-budget-toolbar-v23">
    <div class="stitch-budget-toolbar-heading"><h3>קטגוריות תקציב</h3><small>בחר סידור, עדכן את החודש או השתמש בתבנית הקבועה.</small></div>
    <div class="stitch-budget-controls">
