@@ -16,6 +16,16 @@ const categoryPalette=[
  {name:'ירוק יער',value:'#159A75'},{name:'טורקיז',value:'#158B9B'},{name:'כחול',value:'#3B6FD8'},{name:'אינדיגו',value:'#5B5BD6'},{name:'סגול',value:'#7E57C2'},
  {name:'ורוד עתיק',value:'#C95F7C'},{name:'קורל',value:'#DF6B57'},{name:'זהב',value:'#D5962C'},{name:'זית',value:'#789B4A'},{name:'אפור כחול',value:'#60758A'}
 ];
+const categoryIconCatalog=[
+ {name:'כללי',value:'receipt_long'},{name:'משכורת',value:'payments'},{name:'חיסכון',value:'savings'},{name:'דיור',value:'home'},
+ {name:'קניות',value:'shopping_cart'},{name:'מזון',value:'restaurant'},{name:'תחבורה',value:'directions_car'},{name:'דלק',value:'local_gas_station'},
+ {name:'ביגוד',value:'apparel'},{name:'טיפוח',value:'face_retouching_natural'},{name:'בריאות',value:'health_and_safety'},{name:'ילדים',value:'child_care'},
+ {name:'חינוך',value:'school'},{name:'חשבונות',value:'request_quote'},{name:'חשמל',value:'bolt'},{name:'מים',value:'water_drop'},
+ {name:'טלפון',value:'phone_iphone'},{name:'אינטרנט',value:'wifi'},{name:'ביטוח',value:'shield'},{name:'אשראי',value:'credit_card'},
+ {name:'מנויים',value:'subscriptions'},{name:'פנאי',value:'celebration'},{name:'ספורט',value:'fitness_center'},{name:'חופשה',value:'flight'},
+ {name:'מלון',value:'hotel'},{name:'מתנות',value:'redeem'},{name:'תרומות',value:'volunteer_activism'},{name:'חיות',value:'pets'},
+ {name:'עבודה',value:'work'},{name:'תחזוקה',value:'construction'}
+];
 const fixedExpenseWords=['שכר דירה','שכירות','משכנתא','ארנונה','ועד בית','ביטוח','הלוואה','חשבון','חשבונות','חשמל','מים','גז','גן','גנים','מעון','צהרון','אינטרנט','טלפון','סלולר','מנוי'];
 
 const defaults={
@@ -27,6 +37,32 @@ const defaultCategories=[
  ['תחבורה','expense','#158B9B'],['חשבונות','expense','#C95F7C'],['בריאות','expense','#DF6B57'],['ילדים','expense','#D5962C'],
  ['פנאי','expense','#5B5BD6'],['תרומות','expense','#789B4A'],['חיסכון והשקעה','saving','#159A75']
 ].map(([name,kind,color])=>({id:uid(),name,kind,color}));
+function categoryIconName(c={}){
+ if(c.icon&&categoryIconCatalog.some(x=>x.value===c.icon))return c.icon;
+ let name=(c.name||'').toLowerCase();
+ if(c.kind==='income')return'payments';
+ if(c.kind==='saving')return'savings';
+ if(/דיור|שכירות|משכנתא|בית/.test(name))return'home';
+ if(/מזון|אוכל|מסעד|סופר|קניות/.test(name))return'shopping_cart';
+ if(/תחבורה|רכב|דלק/.test(name))return'local_gas_station';
+ if(/ביגוד|בגד|נעל/.test(name))return'apparel';
+ if(/טיפוח|ספר|קוסמט/.test(name))return'face_retouching_natural';
+ if(/בריאות|רופא|תרופ/.test(name))return'health_and_safety';
+ if(/ילד|גן|מעון/.test(name))return'child_care';
+ if(/חינוך|לימוד|בית ספר/.test(name))return'school';
+ if(/חשבון|ארנונה|ועד בית/.test(name))return'request_quote';
+ if(/חשמל/.test(name))return'bolt';
+ if(/מים/.test(name))return'water_drop';
+ if(/טלפון|סלולר/.test(name))return'phone_iphone';
+ if(/אינטרנט|וויפי/.test(name))return'wifi';
+ if(/ביטוח/.test(name))return'shield';
+ if(/אשראי/.test(name))return'credit_card';
+ if(/מנוי/.test(name))return'subscriptions';
+ if(/ספורט|כושר/.test(name))return'fitness_center';
+ if(/פנאי|בילוי/.test(name))return'celebration';
+ if(/תרומ|צדקה/.test(name))return'volunteer_activism';
+ return'receipt_long'
+}
 function migrate(raw){
  let d={...structuredClone(defaults),...(raw||{})};
  for(const k of ['transactions','accounts','wallets','categories','budgets','monthPlans','goals','debts','recurring','snapshots','reviews'])if(!Array.isArray(d[k]))d[k]=[];
@@ -36,7 +72,7 @@ function migrate(raw){
  d.accounts=d.accounts.map(a=>{let type=a.type==='נכס'?'asset':a.type==='חוב'?'liability':a.type||'asset',name=(a.name||'').toLowerCase(),subtype=a.subtype||(name.includes('עו״ש')||name.includes('עוש')||name.includes('בנק')?'bank':name.includes('מזומן')?'cash':name.includes('פנס')||name.includes('גמל')||name.includes('השתלמות')?'pension':name.includes('רכב')||name.includes('דירה')||name.includes('בית')?'property':'other'),liquid=a.liquid??(type==='asset'&&['bank','cash'].includes(subtype)),balance=+a.balance||0;return{...a,type,subtype,liquid,balance,originalBalance:type==='liability'?(+a.originalBalance||balance):(+a.originalBalance||0),lender:a.lender||'',balanceAsOf:a.balanceAsOf||migrationTime}});
  d.wallets=d.wallets.map(w=>{let walletType=w.walletType||(/bit/i.test(w.name||'')?'bit':/(paybox|פייבוקס)/i.test(w.name||'')?'paybox':'other');return{...w,balance:+w.balance||0,walletType,color:w.color||walletPalette[walletType]||walletPalette.other,expiryDate:w.expiryDate||''}});
  d.transactions=d.transactions.map(t=>({...t,amount:+t.amount||0,kind:t.kind||'expense',reviewed:t.reviewed??true,createdAt:t.createdAt||null}));
- d.categories=d.categories.map(c=>({...c,budgetBehavior:['fixed','variable'].includes(c.budgetBehavior)?c.budgetBehavior:'auto'}));
+ d.categories=d.categories.map(c=>({...c,icon:c.icon||'',budgetBehavior:['fixed','variable'].includes(c.budgetBehavior)?c.budgetBehavior:'auto'}));
  d.debts=d.debts.map(x=>{let balance=+x.balance||0;return{...x,balance,interest:+x.interest||0,payment:+x.payment||0,originalBalance:+x.originalBalance||balance,lender:x.lender||''}});
  d.ironBudget=d.ironBudget&&Array.isArray(d.ironBudget.categories)?d.ironBudget:{income:0,categories:[]};
  d.goals=d.goals.map(g=>{let hadNewSchedule=!!(g.startMonth||g.deadlineMonth),startMonth=g.startMonth||monthKey(),deadlineMonth=g.deadlineMonth||(g.date||'').slice(0,7),term=g.term||(monthsInclusive(startMonth,deadlineMonth)&&monthsInclusive(startMonth,deadlineMonth)<=24?'short':'long');return{...g,target:+g.target||0,current:+g.current||0,monthly:+g.monthly||0,startMonth,deadlineMonth,calculationMode:g.calculationMode||(hadNewSchedule?'auto':'manual'),moneyLocation:g.moneyLocation||'',term}});
@@ -248,8 +284,8 @@ const actions={
 };
 function bindDynamicKind(){setTimeout(()=>{let k=$('#kindField');if(k)k.onchange=()=>{$('#catField').innerHTML=db.categories.filter(c=>c.kind===k.value||k.value==='saving'&&c.kind==='saving').map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')};$$('[data-close-modal]').forEach(b=>b.onclick=()=>$('#modal').hidden=true)},0)}
 function editCategory(c={}){
- let selectedColor=c.color||categoryPalette[0].value;
- modal(c.id?'עריכת קטגוריה':'קטגוריה חדשה',`<div class="form-grid"><label>שם<input name="name" value="${esc(c.name||'')}" required></label><label>סוג<select name="kind" id="categoryKind"><option value="expense" ${!c.kind||c.kind==='expense'?'selected':''}>הוצאה</option><option value="income" ${c.kind==='income'?'selected':''}>הכנסה</option><option value="saving" ${c.kind==='saving'?'selected':''}>חיסכון</option></select></label><div class="category-color-field full"><span>צבע הקטגוריה</span><small>פלטה מקצועית שנבחרה במיוחד לממשק</small><input name="color" id="categoryColorValue" type="hidden" value="${selectedColor}"><div class="category-color-palette">${categoryPalette.map(x=>`<button type="button" class="category-color-option ${x.value.toLowerCase()===selectedColor.toLowerCase()?'selected':''}" data-category-color="${x.value}" aria-label="${x.name}" title="${x.name}"><i style="--category-swatch:${x.value}"></i><b>${x.name}</b></button>`).join('')}</div></div><label id="budgetBehaviorWrap">אופי ההוצאה<select name="budgetBehavior"><option value="auto" ${!c.budgetBehavior||c.budgetBehavior==='auto'?'selected':''}>זיהוי חכם אוטומטי</option><option value="fixed" ${c.budgetBehavior==='fixed'?'selected':''}>קבועה / תקופתית</option><option value="variable" ${c.budgetBehavior==='variable'?'selected':''}>גמישה / יומיומית</option></select><small class="form-help">המלצות יומיות יוצגו רק להוצאות גמישות</small></label></div>${field.actions}${c.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{if(c.id)Object.assign(c,x);else db.categories.push({...x,id:uid()});save('הקטגוריה והצבע נשמרו')});let kind=$('#categoryKind'),behavior=$('#budgetBehaviorWrap'),syncBehavior=()=>behavior.hidden=kind.value!=='expense';kind.onchange=syncBehavior;syncBehavior();$$('[data-category-color]').forEach(button=>button.onclick=()=>{$('#categoryColorValue').value=button.dataset.categoryColor;$$('[data-category-color]').forEach(x=>x.classList.toggle('selected',x===button))});if(c.id)$('#deleteInside').onclick=()=>{if(db.transactions.some(t=>t.category===c.id))return alert('לא ניתן למחוק קטגוריה שיש בה תנועות. העבר אותן קודם לקטגוריה אחרת.');db.categories=db.categories.filter(x=>x.id!==c.id);$('#modal').hidden=true;save('הקטגוריה נמחקה')}
+ let selectedColor=c.color||categoryPalette[0].value,selectedIcon=c.icon||categoryIconName(c);
+ modal(c.id?'עריכת קטגוריה':'קטגוריה חדשה',`<div class="form-grid"><label>שם<input name="name" value="${esc(c.name||'')}" required></label><label>סוג<select name="kind" id="categoryKind"><option value="expense" ${!c.kind||c.kind==='expense'?'selected':''}>הוצאה</option><option value="income" ${c.kind==='income'?'selected':''}>הכנסה</option><option value="saving" ${c.kind==='saving'?'selected':''}>חיסכון</option></select></label><div class="category-icon-field full"><span>אייקון הקטגוריה</span><small>האייקון יופיע ליד התנועות ובמסכי הניהול</small><input name="icon" id="categoryIconValue" type="hidden" value="${selectedIcon}"><div class="category-icon-palette">${categoryIconCatalog.map(x=>`<button type="button" class="category-icon-option ${x.value===selectedIcon?'selected':''}" data-category-icon="${x.value}" aria-label="${x.name}" title="${x.name}"><span class="material-symbols-outlined">${x.value}</span><b>${x.name}</b></button>`).join('')}</div></div><div class="category-color-field full"><span>צבע הקטגוריה</span><small>פלטה מקצועית שנבחרה במיוחד לממשק</small><input name="color" id="categoryColorValue" type="hidden" value="${selectedColor}"><div class="category-color-palette">${categoryPalette.map(x=>`<button type="button" class="category-color-option ${x.value.toLowerCase()===selectedColor.toLowerCase()?'selected':''}" data-category-color="${x.value}" aria-label="${x.name}" title="${x.name}"><i style="--category-swatch:${x.value}"></i><b>${x.name}</b></button>`).join('')}</div></div><label id="budgetBehaviorWrap">אופי ההוצאה<select name="budgetBehavior"><option value="auto" ${!c.budgetBehavior||c.budgetBehavior==='auto'?'selected':''}>זיהוי חכם אוטומטי</option><option value="fixed" ${c.budgetBehavior==='fixed'?'selected':''}>קבועה / תקופתית</option><option value="variable" ${c.budgetBehavior==='variable'?'selected':''}>גמישה / יומיומית</option></select><small class="form-help">המלצות יומיות יוצגו רק להוצאות גמישות</small></label></div>${field.actions}${c.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{if(c.id)Object.assign(c,x);else db.categories.push({...x,id:uid()});save('הקטגוריה, האייקון והצבע נשמרו')});let kind=$('#categoryKind'),behavior=$('#budgetBehaviorWrap'),syncBehavior=()=>behavior.hidden=kind.value!=='expense';kind.onchange=syncBehavior;syncBehavior();$$('[data-category-icon]').forEach(button=>button.onclick=()=>{$('#categoryIconValue').value=button.dataset.categoryIcon;$$('[data-category-icon]').forEach(x=>x.classList.toggle('selected',x===button))});$$('[data-category-color]').forEach(button=>button.onclick=()=>{$('#categoryColorValue').value=button.dataset.categoryColor;$$('[data-category-color]').forEach(x=>x.classList.toggle('selected',x===button))});if(c.id)$('#deleteInside').onclick=()=>{if(db.transactions.some(t=>t.category===c.id))return alert('לא ניתן למחוק קטגוריה שיש בה תנועות. העבר אותן קודם לקטגוריה אחרת.');db.categories=db.categories.filter(x=>x.id!==c.id);$('#modal').hidden=true;save('הקטגוריה נמחקה')}
 }
 function editAccount(a={}){
  modal(a.id?'עריכת חשבון':'חשבון חדש',`<div class="form-grid"><label>שם החשבון<input name="name" value="${esc(a.name||'')}" required></label><label>סוג<select name="type"><option value="asset" ${a.type==='asset'?'selected':''}>נכס</option><option value="liability" ${a.type==='liability'?'selected':''}>התחייבות</option></select></label><label>יתרה נוכחית<input name="balance" type="number" step="0.01" value="${a.balance??''}" required></label></div>${field.actions}${a.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{if(a.id)Object.assign(a,x,{balance:+x.balance});else db.accounts.push({...x,id:uid(),balance:+x.balance});save()});if(a.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק את החשבון?')){db.accounts=db.accounts.filter(x=>x.id!==a.id);$('#modal').hidden=true;save('החשבון נמחק')}}

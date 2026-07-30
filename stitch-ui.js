@@ -1,4 +1,4 @@
-/* HON Stitch UI v23
+/* HON Stitch UI v24
  * Visual layer based on the user's exported Google Stitch screens.
  * The data model, persistence and Supabase synchronization remain in app.js/cloud.js.
  */
@@ -14,6 +14,7 @@ var stitchPages=[
  ['settings','settings','הגדרות']
 ];
 var stitchPrimary=['dashboard','cashflow','wealth','goals'];
+var stitchGoalPlanMonth=monthKey();
 
 function stitchIcon(name,extra=''){
  return `<span class="material-symbols-outlined ${extra}">${name}</span>`
@@ -35,17 +36,9 @@ function stitchSectionTitle(title,link='',page=''){
  return `<div class="stitch-section-title"><h2>${esc(title)}</h2>${link?`<button type="button" class="stitch-section-link" ${page?`data-page="${page}"`:''}>${esc(link)} ${stitchIcon('chevron_left')}</button>`:''}</div>`
 }
 function stitchTypeIcon(tx){
- let name=(cat(tx.category).name||'').toLowerCase();
- if(tx.kind==='income')return'payments';
- if(tx.kind==='saving')return'savings';
  if(tx.kind==='debt')return'credit_score';
  if(tx.kind==='transfer')return'swap_horiz';
- if(/מזון|קניות|סופר/.test(name))return'shopping_cart';
- if(/רכב|דלק|תחבורה/.test(name))return'local_gas_station';
- if(/דיור|שכירות|בית/.test(name))return'home';
- if(/בריאות/.test(name))return'health_and_safety';
- if(/פנאי|בילוי/.test(name))return'celebration';
- return'receipt_long'
+ return categoryIconName(cat(tx.category))
 }
 function stitchTxAmount(tx){
  if(tx.kind==='income')return`+${numberAmount(tx.amount)} ₪`;
@@ -136,7 +129,7 @@ function stitchBudgetCards(){
  return rows.map((c,index)=>{
   let target=budgetFor(selectedMonth,c.id),spent=actual.get(c.id)||0,left=target-spent,over=spent>target,pct=target?Math.min(100,spent/target*100):spent?100:0;
   return `<article class="stitch-budget-card budget-card ${over?'over overspent':'within-budget'}" style="--cat-color:${c.color}" data-cat-id="${c.id}" ${mode==='manual'?'draggable="true"':''}>
-   <div class="stitch-budget-card-head"><div><h3>${esc(c.name)}</h3><span class="stitch-budget-state">${over?stitchIcon('warning'):''}${over?(target?`חריגה של ${money(Math.abs(left))}`:`חריגה ללא יעד: ${money(spent)}`):`נשאר ${money(left)}`}</span></div><div><strong>${money(spent)}</strong><small>מתוך ${money(target)}</small></div></div>
+   <div class="stitch-budget-card-head"><div class="stitch-budget-title"><span class="stitch-budget-category-icon" style="--cat-color:${c.color}">${stitchIcon(categoryIconName(c))}</span><div><h3>${esc(c.name)}</h3><span class="stitch-budget-state">${over?stitchIcon('warning'):''}${over?(target?`חריגה של ${money(Math.abs(left))}`:`חריגה ללא יעד: ${money(spent)}`):`נשאר ${money(left)}`}</span></div></div><div><strong>${money(spent)}</strong><small>מתוך ${money(target)}</small></div></div>
    <div class="stitch-budget-progress"><i style="width:${pct}%"></i></div>
    ${mode==='manual'?`<div class="stitch-order-buttons"><button type="button" data-action="moveCatUp" data-id="${c.id}" ${index===0?'disabled':''}>↑</button><button type="button" data-action="moveCatDown" data-id="${c.id}" ${index===rows.length-1?'disabled':''}>↓</button></div>`:''}
   </article>`
@@ -145,7 +138,7 @@ function stitchBudgetCards(){
 function stitchForecastView(){
  let f=forecast(selectedMonth),mode=db.settings.budgetSort||'manual';
  return `<section class="stitch-forecast stitch-forecast-v23">
-   <header class="stitch-forecast-heading"><span>${stitchIcon('monitoring')}</span><div><small>תחזית חודשית</small><h2>תחזית לסוף החודש</h2><p>מבוססת על ההכנסות, ההוצאות והמטרות שתוכננו.</p></div></header>
+   <header class="stitch-forecast-heading"><span>${stitchIcon('monitoring')}</span><div><h2>תחזית לסוף החודש</h2><p>מבוססת על ההכנסות, ההוצאות והמטרות שתוכננו.</p></div></header>
    <div class="stitch-forecast-equation">
     <div class="stitch-forecast-factor income"><small>הכנסה צפויה</small><strong>${money(f.projectedIncome)}</strong></div>
     <b class="stitch-forecast-operator">-</b>
@@ -266,36 +259,22 @@ function stitchGoalCard(g){
  </article>`
 }
 
-function stitchGoalAnnualData(goals){
- let now=monthKey(),years=new Map();
- goals.forEach(g=>{
-  let remaining=Math.max(0,(+g.target||0)-(+g.current||0)),end=g.deadlineMonth||(g.date||'').slice(0,7);
-  if(!remaining||!end)return;
-  let start=g.startMonth||now;
-  if(start<now)start=now;
-  if(end<start)return;
-  let monthly=goalMonthlyAmount(g),startOrdinal=monthOrdinal(start),endOrdinal=monthOrdinal(end);
-  if(!monthly||!startOrdinal||!endOrdinal)return;
-  for(let year=+start.slice(0,4);year<=+end.slice(0,4);year++){
-   let yearStart=monthOrdinal(`${year}-01`),yearEnd=monthOrdinal(`${year}-12`);
-   let months=Math.max(0,Math.min(endOrdinal,yearEnd)-Math.max(startOrdinal,yearStart)+1);
-   if(!months)continue;
-   let amount=monthly*months,row=years.get(year)||{year,total:0,parts:[]};
-   row.total+=amount;
-   row.parts.push({name:g.name,months,amount});
-   years.set(year,row)
-  }
- });
- return [...years.values()].sort((a,b)=>a.year-b.year)
+function stitchGoalPlanForMonth(goals,m){
+ return goals.filter(g=>goalIsActive(g,m)).map(g=>({goal:g,amount:goalMonthlyAmount(g)})).filter(x=>x.amount>0)
 }
-function stitchGoalAnnualPlan(goals){
- let years=stitchGoalAnnualData(goals);
- return `<section class="stitch-goal-years">
-  <div class="stitch-section-title"><div><h2>תוכנית החיסכון לפי שנים</h2><small>כמה צריך לחסוך בכל שנה ומאילו מטרות הסכום מורכב.</small></div></div>
-  ${years.length?`<div class="stitch-goal-year-grid">${years.map(y=>`<article class="stitch-goal-year-card">
-   <header><span>${y.year}</span><div><small>חיסכון מתוכנן</small><strong>${money(y.total)}</strong></div></header>
-   <div class="stitch-goal-year-parts">${y.parts.map(p=>`<div><span><b>${esc(p.name)}</b><small>${p.months} ${p.months===1?'חודש':'חודשים'}</small></span><strong>${money(p.amount)}</strong></div>`).join('')}</div>
-  </article>`).join('')}</div>`:`<div class="stitch-goal-year-empty">${stitchIcon('calendar_month')}<div><b>עדיין אין תוכנית שנתית</b><small>לאחר הגדרת תאריך התחלה ויעד, התוכנית תיבנה כאן אוטומטית.</small></div></div>`}
+function stitchGoalMonthlyPlan(goals){
+ let now=monthKey(),year=+stitchGoalPlanMonth.slice(0,4),maxYear=Math.max(year,...goals.map(g=>+((g.deadlineMonth||(g.date||'').slice(0,7)||'').slice(0,4))||year)),parts=stitchGoalPlanForMonth(goals,stitchGoalPlanMonth),total=parts.reduce((sum,x)=>sum+x.amount,0);
+ let months=Array.from({length:12},(_,index)=>{
+  let value=`${year}-${String(index+1).padStart(2,'0')}`,label=new Date(value+'-15T12:00').toLocaleDateString('he-IL',{month:'short'}),disabled=value<now;
+  return `<button type="button" data-goal-plan-month="${value}" class="${value===stitchGoalPlanMonth?'active':''}" ${disabled?'disabled':''}>${label}</button>`
+ }).join('');
+ return `<section class="stitch-goal-plan-card">
+  <header class="stitch-goal-plan-head"><div><span class="stitch-kicker">תוכנית חודשית</span><h2>כמה צריך לחסוך בכל חודש</h2><p>בחר חודש וראה את הסכום הכולל ומאילו מטרות הוא מורכב.</p></div><div class="stitch-goal-year-switch"><button type="button" data-goal-year="-1" ${year<=+now.slice(0,4)?'disabled':''}>${stitchIcon('chevron_right')}</button><b>${year}</b><button type="button" data-goal-year="1" ${year>=maxYear?'disabled':''}>${stitchIcon('chevron_left')}</button></div></header>
+  <div class="stitch-goal-month-strip">${months}</div>
+  <div class="stitch-goal-month-result">
+   <div class="stitch-goal-month-total"><span class="stitch-goal-month-icon">${stitchIcon('savings')}</span><div><small>נדרש לחסוך ב${new Date(stitchGoalPlanMonth+'-15T12:00').toLocaleDateString('he-IL',{month:'long',year:'numeric'})}</small><strong>${money(total)}</strong><span>${parts.length?`${parts.length} ${parts.length===1?'מטרה פעילה':'מטרות פעילות'}`:'אין מטרות פעילות בחודש הזה'}</span></div></div>
+   <div class="stitch-goal-month-parts">${parts.length?parts.map(({goal,amount})=>`<div><span><b>${esc(goal.name)}</b><small>${esc(goal.moneyLocation||'מיקום הכסף לא הוגדר')}</small></span><strong>${money(amount)}</strong></div>`).join(''):`<div class="stitch-goal-month-empty">${stitchIcon('event_available')}<span><b>אין חיסכון מתוכנן</b><small>בחודש שנבחר לא מתחילה או ממשיכה אף מטרה.</small></span></div>`}</div>
+  </div>
  </section>`
 }
 
@@ -307,11 +286,13 @@ goals=function(){
   ${stitchMobileHeader('מטרות',`<button type="button" class="primary" data-action="addGoal">＋ מטרה חדשה</button>`)}
   <div class="stitch-page-top"><h1>מטרות פיננסיות</h1><button type="button" class="primary" data-action="addGoal">＋ מטרה חדשה</button></div>
   <div class="stitch-goal-summary"><div><small>סך כל היעדים</small><strong>${money(targets)}</strong></div><div><small>כבר נצבר</small><strong class="up">${money(saved)}</strong></div><div><small>נדרש החודש</small><strong>${money(monthly)}</strong></div></div>
-  ${stitchGoalAnnualPlan(sorted)}
+  ${stitchGoalMonthlyPlan(sorted)}
   ${stitchSectionTitle('מטרות פעילות')}
   <div class="stitch-goal-grid">${sorted.length?sorted.map(stitchGoalCard).join(''):empty('emoji_events','עוד אין מטרות','הוסף מטרה ראשונה ובנה תוכנית חודשית')}</div>
   <section class="stitch-roadmap">${stitchSectionTitle('מפת דרכים פיננסית')}<div>${roadmap||'<p class="muted">המטרות שתגדיר יסתדרו כאן לפי מועד ההתחלה.</p>'}</div></section>
  </section>`;
+ $$('[data-goal-year]').forEach(button=>button.onclick=()=>{let d=new Date(stitchGoalPlanMonth+'-15T12:00');d.setFullYear(d.getFullYear()+(+button.dataset.goalYear||0));stitchGoalPlanMonth=monthKey(d);render()});
+ $$('[data-goal-plan-month]').forEach(button=>button.onclick=()=>{stitchGoalPlanMonth=button.dataset.goalPlanMonth;render()});
  stitchBindCommon()
 };
 
@@ -322,12 +303,11 @@ function stitchDebtCard(d){
 
 debts=function(){
  heading('חובות','תוכנית חכמה ליציאה מחובות');
- let p=debtPortfolio(),items=[...p.items].filter(d=>(+d.balance||0)>0),priority=[...items].sort((a,b)=>(+b.interest||0)-(+a.interest||0))[0],prioritySim=priority?debtCalc(priority,0):null,fast=priority?debtCalc(priority,200):null;
+ let p=debtPortfolio(),items=[...p.items].filter(d=>(+d.balance||0)>0);
  $('#view').innerHTML=`<section class="stitch-page">
   ${stitchMobileHeader('חובות',`<button type="button" class="primary" data-action="addDebt">＋ חוב</button>`)}
   <div class="stitch-page-top"><h1>ניהול חובות חכם</h1><button type="button" class="primary" data-action="addDebt">＋ הוספת חוב</button></div>
   <article class="stitch-debt-hero"><small>סה״כ יתרת חובות</small><strong>${money(p.total)}</strong><div class="stitch-debt-stats"><div><span>החזר חודשי</span><b>${money(p.monthly)}</b></div><div><span>ריבית משוקללת</span><b>${numberAmount(p.weightedInterest)}%</b></div><div><span>יעד יציאה</span><b>${items.length?debtEndLabel(p.longest):'אין חובות'}</b></div></div></article>
-  ${priority?`<article class="stitch-simulation-card"><span>${stitchIcon('auto_awesome')}</span><div><h3>סימולציה חכמה</h3><p>אם תוסיף 200 ₪ בחודש ל־${esc(priority.name)}, אפשר לקצר כ־${Math.max(0,prioritySim.months-fast.months)} חודשים ולחסוך כ־${money(Math.max(0,prioritySim.interest-fast.interest))} בריבית.</p></div><button type="button" class="ghost" data-action="${priority._source==='account'?'editAccount':'editDebt'}" data-id="${priority.id}">בדיקת החוב</button></article>`:''}
   <div class="stitch-budget-toolbar"><h3>פירוט התחייבויות</h3><button type="button" class="stitch-section-link" data-action="addDebt">＋ הוספת חוב</button></div>
   <div class="stitch-debt-grid">${items.length?items.map(stitchDebtCard).join(''):empty('credit_score','אין חובות פעילים','מצב מצוין - אין התחייבויות לסילוק')}</div>
  </section>`;
@@ -358,7 +338,7 @@ settings=function(){
   <div class="stitch-settings-grid">
    <article class="stitch-review-card"><span class="stitch-kicker">המשפחה</span><h2>הפרופיל שלי</h2><label>השם שיופיע באפליקציה<input id="userName" value="${esc(db.settings.name||'')}"></label><div class="stitch-review-actions"><button type="button" class="ghost" id="settingsTheme">${stitchIcon(document.documentElement.classList.contains('dark')?'light_mode':'dark_mode')} החלפת מצב תצוגה</button><button type="button" class="primary" data-action="saveName">שמירת השם</button></div></article>
    <article class="stitch-review-card"><span class="stitch-kicker">שמירה והעברה</span><h2>גיבוי מלא</h2><p class="muted">הורד עותק פרטי של כל המידע. אפשר לשחזר אותו בכל מכשיר ובכל גרסה.</p><div class="stitch-review-actions"><label class="ghost upload">שחזור מגיבוי<input id="importFile" type="file" accept=".json" hidden></label><button type="button" class="primary" data-action="export">הורדת גיבוי</button></div></article>
-   <article class="stitch-review-card full-width-card"><div class="stitch-section-title"><div><span class="stitch-kicker">סדר וצבעים</span><h2>קטגוריות</h2></div><button type="button" class="primary" data-action="addCat">＋ קטגוריה</button></div><div id="categorySorter" class="stitch-category-list">${db.categories.map((c,index)=>`<div class="stitch-category-row" draggable="true" data-cat-id="${c.id}"><span class="drag-handle">⋮⋮</span><i class="dot" style="background:${c.color}"></i><span><b>${esc(c.name)}</b><small>${typeName(c.kind)}</small></span><div><button type="button" class="mini-btn" data-action="moveCatUp" data-id="${c.id}" ${index===0?'disabled':''}>↑</button><button type="button" class="mini-btn" data-action="moveCatDown" data-id="${c.id}" ${index===db.categories.length-1?'disabled':''}>↓</button><button type="button" class="mini-btn" data-action="editCat" data-id="${c.id}">עריכה</button></div></div>`).join('')}</div></article>
+   <article class="stitch-review-card full-width-card"><div class="stitch-section-title"><div><span class="stitch-kicker">סדר, אייקונים וצבעים</span><h2>קטגוריות</h2></div><button type="button" class="primary" data-action="addCat">＋ קטגוריה</button></div><div id="categorySorter" class="stitch-category-list">${db.categories.map((c,index)=>`<div class="stitch-category-row" draggable="true" data-cat-id="${c.id}"><span class="drag-handle">⋮⋮</span><span class="stitch-category-icon" style="--cat-color:${c.color}">${stitchIcon(categoryIconName(c))}</span><span><b>${esc(c.name)}</b><small>${typeName(c.kind)}</small></span><div><button type="button" class="mini-btn" data-action="moveCatUp" data-id="${c.id}" ${index===0?'disabled':''}>↑</button><button type="button" class="mini-btn" data-action="moveCatDown" data-id="${c.id}" ${index===db.categories.length-1?'disabled':''}>↓</button><button type="button" class="mini-btn" data-action="editCat" data-id="${c.id}">עריכה</button></div></div>`).join('')}</div></article>
    <article class="stitch-review-card full-width-card"><span class="stitch-kicker">פרטיות ותחזוקה</span><h2>המידע שלך</h2><p class="muted">המידע נשמר במכשיר ומסתנכרן לענן כשהחשבון מחובר.</p><div class="stitch-data-facts"><span>${db.transactions.length}<small>תנועות</small></span><span>${db.accounts.length}<small>חשבונות</small></span><span>${db.wallets.length}<small>ארנקים</small></span><span>${db.goals.length}<small>מטרות</small></span></div><button type="button" class="danger" data-action="reset">מחיקת כל הנתונים</button></article>
   </div>
  </section>`;
