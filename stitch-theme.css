@@ -2879,3 +2879,18 @@ body.stitch-app>aside{
 .stitch-cloud-version-list b,.stitch-cloud-version-list small{display:block}.stitch-cloud-version-list b{font-size:10px}.stitch-cloud-version-list small{margin-top:2px;color:var(--st-muted);font-size:8px}
 @media(max-width:900px){.stitch-sync-protection{grid-template-columns:1fr}.stitch-sync-protection-facts{display:grid;grid-template-columns:repeat(3,1fr)}.stitch-sync-protection>button{width:100%}}
 @media(max-width:520px){.stitch-sync-protection-facts{grid-template-columns:1fr}.stitch-cloud-version-list article{grid-template-columns:34px minmax(0,1fr)}.stitch-cloud-version-list article>button{grid-column:2;width:100%}}
+
+/* HON v33 - the monthly forecast belongs at the end of the overview */
+.stitch-overview-forecast{
+ grid-column:1/-1;
+ width:100%;
+ min-width:0;
+ margin-top:4px;
+}
+.stitch-overview-forecast .stitch-forecast{width:100%}
+@media(max-width:1100px){
+ .stitch-overview-forecast{margin-top:2px}
+}
+@media(max-width:820px){
+ .stitch-overview-forecast{margin-top:0}
+}

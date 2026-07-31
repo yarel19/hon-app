@@ -1,4 +1,4 @@
-/* HON Stitch UI v32
+/* HON Stitch UI v33
  * Visual layer based on the user's exported Google Stitch screens.
  * The data model, persistence and Supabase synchronization remain in app.js/cloud.js.
  */
@@ -121,6 +121,14 @@ function stitchCategoryBudgetComparison(actual,target,defined=true){
  return `<span class="stitch-target-compare ${exact?'exact':difference>0?'bad':'good'}"><b>${label}</b><em>${money(actual)} מתוך ${money(target)}</em></span>`
 }
 
+function stitchForecastCard(month=selectedMonth){
+ let f=forecast(month);
+ return `<section class="stitch-forecast stitch-forecast-luxury">
+   <div class="stitch-forecast-luxury-top"><div class="stitch-forecast-luxury-copy"><span>המבט קדימה</span><h2>תחזית לסוף החודש</h2><p>תמונה שמרנית המבוססת על התקציב, התנועות, המטרות וקופת הגמישות.</p></div><div class="stitch-forecast-luxury-result ${f.free<0?'negative':'positive'}"><small>${f.free<0?'חוסר צפוי':'צפוי להישאר'}</small><strong dir="ltr">${signedMoney(f.free)}</strong></div></div>
+   <div class="stitch-forecast-breakdown"><div class="income"><span>הכנסה צפויה</span><strong>${money(f.projectedIncome)}</strong></div><div class="expense"><span>הוצאות צפויות</span><strong>${money(f.projectedExpense)}</strong></div><div class="goals"><span>מטרות וחיסכון</span><strong>${money(f.goalCommit)}</strong></div></div>
+  </section>`
+}
+
 dashboard=function(){
  heading('סקירה','תמונה קצרה וברורה של החודש');
  let currentMonth=monthKey();ensureMonthlyOpeningBalances(currentMonth);
@@ -153,6 +161,7 @@ dashboard=function(){
     <section class="stitch-advice-section">${stitchSectionTitle('הצעות ייעול') }<div class="stitch-advice-grid">${adviceHtml||'<p class="muted">לאחר הוספת תנועות יוצגו כאן המלצות.</p>'}</div></section>
     <section class="stitch-wallet-section">${stitchSectionTitle('ארנקים דיגיטליים','נהל הכל','wallets')}<div class="stitch-wallet-compact-list">${walletHtml||'<p class="muted">עוד לא נוספו ארנקים.</p>'}</div></section>
    </div>
+   <section class="stitch-overview-forecast" aria-label="תחזית לסוף החודש">${stitchForecastCard(currentMonth)}</section>
   </div>
  </section>`;
  stitchBindCommon()
@@ -238,12 +247,8 @@ actions.allocateFlex=stitchOpenFlexAllocator;
 actions.flexHistory=stitchOpenFlexHistory;
 
 function stitchForecastView(){
- let f=forecast(selectedMonth),mode=db.settings.budgetSort||'manual';
- return `<section class="stitch-forecast stitch-forecast-luxury">
-   <div class="stitch-forecast-luxury-top"><div class="stitch-forecast-luxury-copy"><span>המבט קדימה</span><h2>תחזית לסוף החודש</h2><p>תמונה שמרנית המבוססת על התקציב, התנועות, המטרות וקופת הגמישות.</p></div><div class="stitch-forecast-luxury-result ${f.free<0?'negative':'positive'}"><small>${f.free<0?'חוסר צפוי':'צפוי להישאר'}</small><strong dir="ltr">${signedMoney(f.free)}</strong></div></div>
-   <div class="stitch-forecast-breakdown"><div class="income"><span>הכנסה צפויה</span><strong>${money(f.projectedIncome)}</strong></div><div class="expense"><span>הוצאות צפויות</span><strong>${money(f.projectedExpense)}</strong></div><div class="goals"><span>מטרות וחיסכון</span><strong>${money(f.goalCommit)}</strong></div></div>
-  </section>
-  ${stitchFlexFundCard()}
+ let mode=db.settings.budgetSort||'manual';
+ return `${stitchFlexFundCard()}
   <div class="stitch-budget-toolbar stitch-budget-toolbar-v23">
    <div class="stitch-budget-toolbar-heading"><h3>קטגוריות תקציב</h3><small>בחר סידור, עדכן את החודש או השתמש בתבנית הקבועה.</small></div>
    <div class="stitch-budget-controls">
@@ -270,14 +275,14 @@ function stitchFilterTransactions(){
 }
 
 cashflow=function(){
- heading('תקציב ותזרים','תקציב, תחזית ותנועות במקום אחד');
+ heading('תקציב ותזרים','תקציב ותנועות במקום אחד');
  let t=totals(selectedMonth),out=t.expense+t.saving+t.debt,balance=t.income-out,targets=stitchMonthlyTargets(selectedMonth);
  $('#view').innerHTML=`<section class="stitch-page">
   ${stitchMobileHeader('תקציב ותזרים')}
   <section class="stitch-cashflow-command">
    <header class="stitch-cashflow-command-head"><div class="stitch-cashflow-command-copy"><span>מרכז התקציב החודשי</span><h1>ניהול תקציב</h1><p>כל הנתונים החשובים של החודש, במקום אחד.</p></div><div class="stitch-cashflow-command-tools"><div class="stitch-month-switch"><button type="button" data-month="-1" aria-label="החודש הקודם">${stitchIcon('chevron_right')}</button><b>${monthName(selectedMonth)}</b><button type="button" data-month="1" aria-label="החודש הבא">${stitchIcon('chevron_left')}</button></div><button class="stitch-sync" type="button" data-sync-now title="סנכרון">${stitchIcon('sync')}</button></div></header>
    <div class="stitch-cashflow-kpis"><article class="income"><small>הכנסות בפועל</small><strong dir="ltr">${money(t.income)}</strong>${stitchTargetComparison(t.income,targets.income,'income',targets.hasIncome)}</article><article class="out"><small>יצא בפועל</small><strong dir="ltr">${money(out)}</strong>${stitchCategoryBudgetComparison(t.expense,targets.expenses,targets.expenses>0)}</article><article class="balance ${balance<0?'negative':''}"><small>יתרה לניהול</small><strong dir="ltr">${signedMoney(balance)}</strong></article></div>
-   <div class="stitch-tabs"><button type="button" class="${flowView==='forecast'?'active':''}" data-flow-tab="forecast">תקציב ותחזית</button><button type="button" class="${flowView==='transactions'?'active':''}" data-flow-tab="transactions">תנועות</button></div>
+   <div class="stitch-tabs"><button type="button" class="${flowView==='forecast'?'active':''}" data-flow-tab="forecast">תקציב</button><button type="button" class="${flowView==='transactions'?'active':''}" data-flow-tab="transactions">תנועות</button></div>
   </section>
   ${flowView==='forecast'?stitchForecastView():stitchTransactionsView()}
  </section>`;
