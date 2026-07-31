@@ -2841,6 +2841,21 @@ body.stitch-app>aside{
  .stitch-cashflow-kpis article{min-height:112px}
 }
 
+/* HON v31 - fully centered balances and full-width monthly category archive */
+@media(min-width:821px){
+ .stitch-history-balance-point>strong[dir="ltr"]{display:block;width:100%;text-align:center!important}
+ .stitch-history-content{display:grid;grid-template-columns:minmax(0,1fr);gap:17px;width:100%}
+ .stitch-history-categories{width:100%;min-width:0}
+ .stitch-history-insights{grid-template-columns:repeat(4,minmax(0,1fr));width:100%}
+}
+@media(min-width:1101px){
+ .stitch-history-category-grid{grid-template-columns:repeat(4,minmax(0,1fr))}
+}
+@media(min-width:821px) and (max-width:1100px){
+ .stitch-history-category-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+ .stitch-history-insights{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
 .stitch-sync-protection{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:20px;background:linear-gradient(135deg,var(--st-primary-soft),var(--st-surface))!important}
 .stitch-sync-protection h2{margin:3px 0 2px}.stitch-sync-protection p{margin:0}
 .stitch-sync-protection-facts{display:flex;align-items:center;gap:8px}
