@@ -1,5 +1,23 @@
-const CACHE='hon-stitch-v31';
-const ASSETS=['./','index.html','fonts.css?v=31','styles.css?v=31','stitch-theme.css?v=31','cloud.js?v=31','app.js?v=31','stitch-ui.js?v=31','manifest.webmanifest','icon.svg','fonts/heebo-hebrew-400-normal.woff2','fonts/heebo-hebrew-500-normal.woff2','fonts/heebo-hebrew-600-normal.woff2','fonts/heebo-hebrew-700-normal.woff2','fonts/heebo-hebrew-800-normal.woff2','fonts/heebo-latin-400-normal.woff2','fonts/heebo-latin-500-normal.woff2','fonts/heebo-latin-600-normal.woff2','fonts/heebo-latin-700-normal.woff2','fonts/heebo-latin-800-normal.woff2','fonts/material-symbols-outlined.woff2'];
-self.addEventListener('install',event=>{self.skipWaiting();event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS)))});
-self.addEventListener('activate',event=>event.waitUntil(Promise.all([self.clients.claim(),caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key))))])));
-self.addEventListener('fetch',event=>{if(event.request.method!=='GET'||new URL(event.request.url).origin!==location.origin)return;const updateFirst=event.request.mode==='navigate'||['script','style'].includes(event.request.destination);if(updateFirst){event.respondWith(fetch(event.request).then(response=>{const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));return response}).catch(()=>caches.match(event.request).then(cached=>cached||caches.match('index.html'))));return}event.respondWith(caches.match(event.request).then(cached=>cached||fetch(event.request).then(response=>{const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(event.request,copy));return response}).catch(()=>caches.match('index.html'))))});
+create table if not exists public.hon_data (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  payload jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
+alter table public.hon_data enable row level security;
+
+create policy "Users read their own HON data"
+on public.hon_data for select
+to authenticated
+using ((select auth.uid()) = user_id);
+
+create policy "Users create their own HON data"
+on public.hon_data for insert
+to authenticated
+with check ((select auth.uid()) = user_id);
+
+create policy "Users update their own HON data"
+on public.hon_data for update
+to authenticated
+using ((select auth.uid()) = user_id)
+with check ((select auth.uid()) = user_id);

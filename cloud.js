@@ -1,202 +1,893 @@
-(function(){
- const DEFAULT_CLOUD={url:'https://bofbgdoadqzwijhqeoed.supabase.co',key:'sb_publishable_mshQte_V_xRw2GKvL1FZUg_mP-xc0-D'};
- const clone=value=>{try{return structuredClone(value)}catch{return JSON.parse(JSON.stringify(value))}};
- const clean=value=>{let copy=clone(value||{});if(copy&&typeof copy==='object')Object.keys(copy).filter(key=>key.startsWith('_honSync')).forEach(key=>delete copy[key]);return copy};
- const stable=value=>{
-  if(Array.isArray(value))return '['+value.map(stable).join(',')+']';
-  if(value&&typeof value==='object')return '{'+Object.keys(value).filter(key=>!key.startsWith('_honSync')).sort().map(key=>JSON.stringify(key)+':'+stable(value[key])).join(',')+'}';
-  return JSON.stringify(value)
- };
- const same=(a,b)=>stable(a)===stable(b);
- const plain=value=>value&&typeof value==='object'&&!Array.isArray(value);
- const itemKey=(path,item,index)=>{
-  if(!plain(item))return `value:${stable(item)}`;
-  if(item.id)return `id:${item.id}`;
-  if(path==='budgets')return `budget:${item.month||''}:${item.category||''}`;
-  if(path==='monthPlans'||path==='snapshots'||path==='reviews')return `month:${item.month||''}`;
-  if(path==='monthlyOpeningBalances')return `opening:${item.month||''}:${item.type||''}`;
-  if(path==='ironBudget.categories')return `iron:${item.category||''}`;
-  return `object:${stable(item)}:${index}`
- };
- function mergeValue(base,local,remote,context,path=''){
-  let localChanged=!same(local,base),remoteChanged=!same(remote,base);
-  if(!localChanged)return clone(remote);
-  if(!remoteChanged)return clone(local);
-  if(same(local,remote))return clone(local);
-  if(local===undefined||remote===undefined)return clone(context.localWins?local:remote);
-  if(Array.isArray(local)&&Array.isArray(remote))return mergeArray(Array.isArray(base)?base:[],local,remote,context,path);
-  if(plain(local)&&plain(remote))return mergeObject(plain(base)?base:{},local,remote,context,path);
-  return clone(context.localWins?local:remote)
- }
- function mergeObject(base,local,remote,context,path=''){
-  let result={},keys=new Set([...Object.keys(base||{}),...Object.keys(local||{}),...Object.keys(remote||{})]);
-  keys.forEach(key=>{if(key.startsWith('_honSync'))return;let value=mergeValue(base?.[key],local?.[key],remote?.[key],context,path?`${path}.${key}`:key);if(value!==undefined)result[key]=value});
-  return result
- }
- function mergeArray(base,local,remote,context,path){
-  let baseMap=new Map(base.map((item,index)=>[itemKey(path,item,index),item])),localMap=new Map(local.map((item,index)=>[itemKey(path,item,index),item])),remoteMap=new Map(remote.map((item,index)=>[itemKey(path,item,index),item]));
-  let preferred=same(local,base)?remote:local,order=[],seen=new Set();
-  [...preferred,...remote,...local,...base].forEach((item,index)=>{let key=itemKey(path,item,index);if(!seen.has(key)){seen.add(key);order.push(key)}});
-  return order.map(key=>mergeValue(baseMap.get(key),localMap.get(key),remoteMap.get(key),context,`${path}[]`)).filter(value=>value!==undefined)
- }
- const mergeData=(base,local,remote,localChangedAt,remoteChangedAt)=>mergeObject(clean(base),clean(local),clean(remote),{localWins:(localChangedAt||'')>(remoteChangedAt||'')});
+const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
+const mobileDevice=/Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)||window.matchMedia?.('(pointer:coarse)').matches;
+document.documentElement.classList.toggle('mobile-device',!!mobileDevice);
+const uid=()=>crypto.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2);
+const numberAmount=n=>new Intl.NumberFormat('he-IL',{minimumFractionDigits:0,maximumFractionDigits:2}).format(Math.abs(Number(n)||0));
+const money=n=>`${Number(n)<0?'−':''}${numberAmount(n)} ₪`;
+const movementMoney=(n,kind)=>kind==='income'?`${numberAmount(n)} ₪`:`−${numberAmount(n)} ₪`;
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today=()=>{let d=new Date(),o=d.getTimezoneOffset();return new Date(d-o*60000).toISOString().slice(0,10)};
+const monthKey=(d=new Date())=>typeof d==='string'?d.slice(0,7):`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+const monthShift=(n=0)=>{let d=new Date();d.setDate(1);d.setMonth(d.getMonth()+n);return monthKey(d)};
+const monthName=m=>new Date(m+'-15T12:00:00').toLocaleDateString('he-IL',{month:'long',year:'numeric'});
+const daysLeft=()=>new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate()-new Date().getDate()+1;
+const walletPalette={bit:'#1976d2',paybox:'#7c3aed',digital:'#0f9f8f',fighter:'#d9485f',gift:'#d99016',other:'#60758a'};
+const categoryPalette=[
+ {name:'ירוק יער',value:'#159A75'},{name:'טורקיז',value:'#158B9B'},{name:'כחול',value:'#3B6FD8'},{name:'אינדיגו',value:'#5B5BD6'},{name:'סגול',value:'#7E57C2'},
+ {name:'ורוד עתיק',value:'#C95F7C'},{name:'קורל',value:'#DF6B57'},{name:'זהב',value:'#D5962C'},{name:'זית',value:'#789B4A'},{name:'אפור כחול',value:'#60758A'}
+];
+const categoryIconCatalog=[
+ {name:'כללי',value:'receipt_long'},{name:'משכורת',value:'payments'},{name:'חיסכון',value:'savings'},{name:'דיור',value:'home'},
+ {name:'קניות',value:'shopping_cart'},{name:'מזון',value:'restaurant'},{name:'תחבורה',value:'directions_car'},{name:'דלק',value:'local_gas_station'},
+ {name:'ביגוד',value:'checkroom'},{name:'טיפוח',value:'face_retouching_natural'},{name:'בריאות',value:'health_and_safety'},{name:'ילדים',value:'child_care'},
+ {name:'חינוך',value:'school'},{name:'חשבונות',value:'request_quote'},{name:'חשמל',value:'bolt'},{name:'מים',value:'water_drop'},
+ {name:'טלפון',value:'phone_iphone'},{name:'אינטרנט',value:'wifi'},{name:'ביטוח',value:'shield'},{name:'אשראי',value:'credit_card'},
+ {name:'מנויים',value:'subscriptions'},{name:'פנאי',value:'celebration'},{name:'ספורט',value:'fitness_center'},{name:'חופשה',value:'flight'},
+ {name:'מלון',value:'hotel'},{name:'מתנות',value:'redeem'},{name:'תרומות',value:'volunteer_activism'},{name:'חיות',value:'pets'},
+ {name:'עבודה',value:'work'},{name:'תחזוקה',value:'construction'}
+];
+const fixedExpenseWords=['שכר דירה','שכירות','משכנתא','ארנונה','ועד בית','ביטוח','הלוואה','חשבון','חשבונות','חשמל','מים','גז','גן','גנים','מעון','צהרון','אינטרנט','טלפון','סלולר','מנוי'];
 
- const API={
-  config:null,session:null,timer:null,syncTimer:null,pollTimer:null,syncing:false,pulling:false,
-  pendingPayload:null,pendingVersion:0,lastRemoteAt:null,lastPullAt:0,
-  get configured(){return !!(this.config?.url&&this.config?.key)},
-  get dirty(){return localStorage.getItem('honCloudDirty')==='1'},
-  set dirty(value){if(value)localStorage.setItem('honCloudDirty','1');else localStorage.removeItem('honCloudDirty')},
-  get deviceId(){let id=localStorage.getItem('honCloudDeviceId');if(!id){id=crypto.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2);localStorage.setItem('honCloudDeviceId',id)}return id},
-  headers(token=true){let h={'apikey':this.config.key,'Content-Type':'application/json'};if(token&&this.session?.access_token)h.Authorization='Bearer '+this.session.access_token;return h},
-  async request(path,options={}){
-   const {auth=true,_retried=false,...fetchOptions}=options;
-   let res=await fetch(this.config.url.replace(/\/$/,'')+path,{...fetchOptions,cache:'no-store',headers:{...this.headers(auth),...(fetchOptions.headers||{})}}),body=await res.text(),data=null;
-   try{data=body?JSON.parse(body):null}catch{data=body}
-   if(res.status===401&&auth&&!_retried&&await this.refresh())return this.request(path,{...options,_retried:true});
-   if(!res.ok)throw new Error(data?.msg||data?.message||data?.error_description||`שגיאת שרת (${res.status})`);
-   return data
-  },
-  loadConfig(){
-   try{this.config=JSON.parse(localStorage.getItem('honCloudConfig')||'null')||DEFAULT_CLOUD}catch{this.config=DEFAULT_CLOUD}
-   try{this.session=JSON.parse(localStorage.getItem('honCloudSession')||'null')}catch{this.session=null}
-   this.lastRemoteAt=localStorage.getItem('honLastRemoteAt')||null
-  },
-  saveConfig(url,key){this.config={url:url.trim(),key:key.trim()};localStorage.setItem('honCloudConfig',JSON.stringify(this.config))},
-  clearConfig(){
-   ['honCloudConfig','honCloudSession','honCloudDirty','honLastRemoteAt','honLastRemoteRevision','honCloudBase','honCloudBackups'].forEach(k=>localStorage.removeItem(k));
-   this.config=this.session=this.pendingPayload=null
-  },
-  loadBase(){try{return JSON.parse(localStorage.getItem('honCloudBase')||'null')}catch{return null}},
-  setBase(payload,updatedAt,revision){
-   try{localStorage.setItem('honCloudBase',JSON.stringify(clean(payload)))}catch{localStorage.removeItem('honCloudBase')}
-   this.rememberRemote(updatedAt,revision)
-  },
-  rememberRemote(updatedAt,revision){
-   if(updatedAt){this.lastRemoteAt=updatedAt;localStorage.setItem('honLastRemoteAt',updatedAt)}
-   if(revision)localStorage.setItem('honLastRemoteRevision',revision)
-  },
-  rememberBackups(payload){
-   let backups=Array.isArray(payload?._honSyncBackups)?payload._honSyncBackups:[];
-   try{localStorage.setItem('honCloudBackups',JSON.stringify(backups))}catch{localStorage.removeItem('honCloudBackups')}
-  },
-  getBackups(){try{return JSON.parse(localStorage.getItem('honCloudBackups')||'[]')}catch{return[]}},
-  saveSession(s){this.session=s;localStorage.setItem('honCloudSession',JSON.stringify(s));this.scheduleRefresh()},
-  async signUp(email,password){let data=await this.request('/auth/v1/signup',{method:'POST',auth:false,body:JSON.stringify({email,password})});if(data.access_token)this.saveSession(data);return data},
-  async signIn(email,password){let data=await this.request('/auth/v1/token?grant_type=password',{method:'POST',auth:false,body:JSON.stringify({email,password})});this.saveSession(data);return data},
-  async refresh(){
-   if(!this.session?.refresh_token)return false;
-   try{let data=await this.request('/auth/v1/token?grant_type=refresh_token',{method:'POST',auth:false,body:JSON.stringify({refresh_token:this.session.refresh_token})});this.saveSession(data);return true}catch{return false}
-  },
-  signOut(){this.session=null;localStorage.removeItem('honCloudSession');clearTimeout(this.timer);clearInterval(this.pollTimer);this.showAuth()},
-  scheduleRefresh(){
-   clearTimeout(this.timer);if(!this.session?.expires_in)return;
-   this.timer=setTimeout(async()=>{if(!await this.refresh())this.setStatus('error','נדרשת התחברות מחדש')},Math.max(30000,(this.session.expires_in-120)*1000))
-  },
-  async readRemote(){
-   let rows=await this.request('/rest/v1/hon_data?select=payload,updated_at&user_id=eq.'+encodeURIComponent(this.session.user.id)+'&limit=1',{method:'GET'});
-   return rows?.[0]||null
-  },
-  applyRemote(payload,updatedAt,revision,message='עודכן מהענן'){
-   let data=clean(payload);window.HONApplyCloud?.(data,updatedAt);this.setBase(data,updatedAt,revision||payload?._honSyncRevision||'');this.rememberBackups(payload);this.dirty=false;this.pendingPayload=null;this.setStatus('ok',message)
-  },
-  async pull(force=false){
-   if(!this.session?.user?.id||this.pulling||this.syncing)return;
-   if(this.dirty)return this.push(this.pendingPayload||window.HONGetData?.());
-   this.pulling=true;this.setStatus('syncing','בודק עדכונים…');
-   try{
-    let row=await this.readRemote();
-    if(!row?.payload){this.pulling=false;this.dirty=true;this.pendingPayload=clean(window.HONGetData?.());return this.push()}
-    let remoteRevision=row.payload._honSyncRevision||'',lastRevision=localStorage.getItem('honLastRemoteRevision')||'',base=this.loadBase(),local=clean(window.HONGetData?.()),localAt=localStorage.getItem('honLocalChangedAt')||'';
-    if(!base&&localAt&&localAt>row.updated_at&&!same(local,clean(row.payload))){this.pulling=false;this.dirty=true;this.pendingPayload=local;return this.push()}
-    if(force||!base||remoteRevision!==lastRevision)this.applyRemote(row.payload,row.updated_at,remoteRevision);
-    else{this.rememberBackups(row.payload);this.setStatus('ok','הכול מסונכרן')}
-    this.lastPullAt=Date.now()
-   }catch(error){this.setStatus('error','שגיאת סנכרון');console.warn('HON cloud pull failed',error)}
-   finally{this.pulling=false}
-  },
-  queueSync(payload){
-   this.pendingPayload=clean(payload);this.pendingVersion++;this.dirty=true;localStorage.setItem('honLocalChangedAt',new Date().toISOString());
-   if(!this.session?.user?.id)return;
-   clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.push(),450)
-  },
-  buildSnapshot(merged,row,revision,now){
-   let previous=row?.payload?clean(row.payload):null,backups=Array.isArray(row?.payload?._honSyncBackups)?row.payload._honSyncBackups.filter(x=>x?.data):[];
-   if(previous&&Object.keys(previous).length&&!same(previous,merged))backups.push({revision:row.payload._honSyncRevision||'',savedAt:row.updated_at||'',deviceId:row.payload._honSyncDevice||'',data:previous});
-   return {...clean(merged),_honSyncRevision:revision,_honSyncDevice:this.deviceId,_honSyncSavedAt:now,_honSyncBackups:backups.slice(-5)}
-  },
-  async push(payload){
-   if(payload)this.pendingPayload=clean(payload);
-   if(!this.session?.user?.id||this.syncing)return;
-   let local=clean(this.pendingPayload||window.HONGetData?.());if(!local)return;
-   let version=this.pendingVersion,localAt=localStorage.getItem('honLocalChangedAt')||new Date().toISOString(),base=this.loadBase();
-   this.syncing=true;this.setStatus('syncing','ממזג ושומר…');
-   try{
-    for(let attempt=0;attempt<4;attempt++){
-     let row=await this.readRemote(),remote=row?.payload?clean(row.payload):{},remoteAt=row?.updated_at||'';
-     if(!base&&row&&!(this.dirty&&localAt>remoteAt)){this.applyRemote(row.payload,row.updated_at,row.payload._honSyncRevision||'','נשמרה הגרסה החדשה מהענן');return}
-     let merged=mergeData(base||{},local,remote,localAt,remoteAt);
-     if(row&&same(merged,remote)){this.applyRemote(row.payload,row.updated_at,row.payload._honSyncRevision||'','עודכן בלי לדרוס שינויים');return}
-     let revision=crypto.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2),now=new Date().toISOString(),snapshot=this.buildSnapshot(merged,row,revision,now),savedRows;
-     if(row){
-      let condition='updated_at=eq.'+encodeURIComponent(row.updated_at);
-      savedRows=await this.request('/rest/v1/hon_data?user_id=eq.'+encodeURIComponent(this.session.user.id)+'&'+condition,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({payload:snapshot,updated_at:now})});
-      if(!savedRows?.length)continue
-     }else{
-      try{savedRows=await this.request('/rest/v1/hon_data',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({user_id:this.session.user.id,payload:snapshot,updated_at:now})})}catch{continue}
-     }
-     let saved=savedRows?.[0]||{},savedAt=saved.updated_at||now,savedPayload=saved.payload||snapshot;
-     this.rememberRemote(savedAt,savedPayload._honSyncRevision||revision);this.rememberBackups(savedPayload);
-     if(version===this.pendingVersion){this.applyRemote(merged,savedAt,savedPayload._honSyncRevision||revision,'נשמר וסונכרן');this.pendingPayload=null;this.dirty=false}
-     else{this.setStatus('syncing','שומר שינוי נוסף…')}
-     return
-    }
-    throw new Error('המידע השתנה במכשיר אחר בזמן השמירה')
-   }catch(error){this.dirty=true;this.setStatus('error',navigator.onLine?'הסנכרון נעצר בבטחה - נסה שוב':'ממתין לאינטרנט');console.warn('HON cloud push failed',error)}
-   finally{
-    this.syncing=false;
-    if(this.dirty&&this.pendingVersion!==version){clearTimeout(this.syncTimer);this.syncTimer=setTimeout(()=>this.push(),180)}
-   }
-  },
-  async restoreVersion(index){
-   let backup=this.getBackups()[index];if(!backup?.data)return false;
-   let data=clean(backup.data);window.HONApplyCloud?.(data);this.pendingPayload=data;this.pendingVersion++;this.dirty=true;localStorage.setItem('honLocalChangedAt',new Date().toISOString());await this.push();return true
-  },
-  async syncNow(forcePull=false){
-   if(!this.session?.user?.id||this.syncing||this.pulling)return;
-   if(this.dirty)return this.push(this.pendingPayload||window.HONGetData?.());
-   return this.pull(forcePull)
-  },
-  startWatch(){clearInterval(this.pollTimer);this.pollTimer=setInterval(()=>{if(!document.hidden&&navigator.onLine)this.syncNow()},5000)},
-  setStatus(kind,text){
-   let pill=document.querySelector('#syncPill');if(!pill)return;
-   pill.hidden=false;pill.className='sync-pill '+kind;pill.textContent=(kind==='ok'?'● ':kind==='error'?'! ':'↻ ')+text;
-   pill.title=this.session?.user?.email?`מחובר: ${this.session.user.email} · לחץ לסנכרון עכשיו`:'לחץ לסנכרון עכשיו'
-  },
-  showSetup(){
-   let gate=document.querySelector('#authGate');gate.hidden=false;gate.innerHTML=`<div class="modal-card auth-card"><button class="x" id="closeSetup">×</button><div class="brandmark">H</div><h2>חיבור HON לענן</h2><p class="muted">הדבק כאן את כתובת הפרויקט ואת המפתח הציבורי שקיבלת מ-Supabase.</p><form id="cloudSetup"><label>Project URL<input name="url" type="url" value="${this.config?.url||''}" placeholder="https://xxxxx.supabase.co" required></label><label>Publishable / anon key<textarea name="key" rows="4" required>${this.config?.key||''}</textarea></label><p id="setupError" class="down"></p><button class="primary full-btn">שמירה וחיבור</button></form><button class="text-btn" id="clearCloud">מחיקת הגדרת הענן</button></div>`;
-   gate.querySelector('#closeSetup').onclick=()=>gate.hidden=true;gate.querySelector('#clearCloud').onclick=()=>{this.clearConfig();location.reload()};gate.querySelector('form').onsubmit=event=>{event.preventDefault();let form=new FormData(event.target);this.saveConfig(form.get('url'),form.get('key'));location.reload()}
-  },
-  showAuth(){
-   if(!this.configured)return;let gate=document.querySelector('#authGate');gate.hidden=false;gate.innerHTML=`<div class="modal-card auth-card"><div class="brandmark">H</div><h2>המידע המשפחתי שלך</h2><p class="muted">התחבר כדי לשמור ולסנכרן בין המחשב לטלפון.</p><form id="cloudLogin"><label>אימייל<input name="email" type="email" required autocomplete="email"></label><label>סיסמה<input name="password" type="password" minlength="8" required autocomplete="current-password"></label><p id="authError" class="down"></p><button class="primary full-btn" name="mode" value="login">כניסה ל-HON</button><button class="ghost full-btn" name="mode" value="signup">יצירת חשבון חדש</button></form><button class="text-btn" id="localOnly">עבודה מקומית בלבד</button></div>`;
-   let form=gate.querySelector('form'),mode='login';form.querySelectorAll('button[name=mode]').forEach(button=>button.onclick=()=>mode=button.value);
-   form.onsubmit=async event=>{event.preventDefault();let values=new FormData(form),error=gate.querySelector('#authError');error.textContent='';try{let result=mode==='signup'?await this.signUp(values.get('email'),values.get('password')):await this.signIn(values.get('email'),values.get('password'));if(mode==='signup'&&!result.access_token){error.textContent='נשלח אליך אימייל לאישור. אשר אותו ואז התחבר.';return}gate.hidden=true;this.setStatus('ok','מחובר');this.startWatch();await this.syncNow(true)}catch(reason){error.textContent=reason.message}};
-   gate.querySelector('#localOnly').onclick=()=>{gate.hidden=true;this.setStatus('error','מצב מקומי')}
-  },
-  async init(){
-   this.loadConfig();let pill=document.querySelector('#syncPill');
-   if(!this.configured){this.setStatus('error','הפעלת שמירה בענן');pill.onclick=()=>this.showSetup();return}
-   pill.onclick=()=>this.syncNow();
-   if(this.session){
-    if(this.session.expires_at&&this.session.expires_at*1000<Date.now()&&!await this.refresh()){this.session=null;localStorage.removeItem('honCloudSession');this.showAuth();return}
-    this.scheduleRefresh();this.startWatch();await this.syncNow();return
-   }
-   this.showAuth()
+const defaults={
+ version:17,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],budgetFlexTransfers:[],monthlyOpeningBalances:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
+ settings:{name:'יראל',currency:'ILS',onboarded:false,budgetSort:'manual'},
+};
+const defaultCategories=[
+ ['משכורת','income','#159A75'],['הכנסה נוספת','income','#158B9B'],['דיור','expense','#3B6FD8'],['מזון וקניות','expense','#7E57C2'],
+ ['תחבורה','expense','#158B9B'],['חשבונות','expense','#C95F7C'],['בריאות','expense','#DF6B57'],['ילדים','expense','#D5962C'],
+ ['פנאי','expense','#5B5BD6'],['תרומות','expense','#789B4A'],['חיסכון והשקעה','saving','#159A75']
+].map(([name,kind,color])=>({id:uid(),name,kind,color}));
+function categoryIconName(c={}){
+ if(c.icon==='apparel')return'checkroom';
+ if(c.icon&&categoryIconCatalog.some(x=>x.value===c.icon))return c.icon;
+ let name=(c.name||'').toLowerCase();
+ if(c.kind==='income')return'payments';
+ if(c.kind==='saving')return'savings';
+ if(/דיור|שכירות|משכנתא|בית/.test(name))return'home';
+ if(/מזון|אוכל|מסעד|סופר|קניות/.test(name))return'shopping_cart';
+ if(/תחבורה|רכב|דלק/.test(name))return'local_gas_station';
+ if(/ביגוד|בגד|נעל/.test(name))return'checkroom';
+ if(/טיפוח|ספר|קוסמט/.test(name))return'face_retouching_natural';
+ if(/בריאות|רופא|תרופ/.test(name))return'health_and_safety';
+ if(/ילד|גן|מעון/.test(name))return'child_care';
+ if(/חינוך|לימוד|בית ספר/.test(name))return'school';
+ if(/חשבון|ארנונה|ועד בית/.test(name))return'request_quote';
+ if(/חשמל/.test(name))return'bolt';
+ if(/מים/.test(name))return'water_drop';
+ if(/טלפון|סלולר/.test(name))return'phone_iphone';
+ if(/אינטרנט|וויפי/.test(name))return'wifi';
+ if(/ביטוח/.test(name))return'shield';
+ if(/אשראי/.test(name))return'credit_card';
+ if(/מנוי/.test(name))return'subscriptions';
+ if(/ספורט|כושר/.test(name))return'fitness_center';
+ if(/פנאי|בילוי/.test(name))return'celebration';
+ if(/תרומ|צדקה/.test(name))return'volunteer_activism';
+ return'receipt_long'
+}
+function migrate(raw){
+ let d={...structuredClone(defaults),...(raw||{})};
+ for(const k of ['transactions','accounts','wallets','categories','budgets','budgetFlexTransfers','monthlyOpeningBalances','monthPlans','goals','debts','recurring','snapshots','reviews'])if(!Array.isArray(d[k]))d[k]=[];
+ if(!d.categories.length)d.categories=defaultCategories;
+ d.settings={...defaults.settings,...(d.settings||{})};
+ const migrationTime=new Date().toISOString();
+ d.accounts=d.accounts.map(a=>{let type=a.type==='נכס'?'asset':a.type==='חוב'?'liability':a.type||'asset',name=(a.name||'').toLowerCase(),subtype=a.subtype||(name.includes('עו״ש')||name.includes('עוש')||name.includes('בנק')?'bank':name.includes('מזומן')?'cash':name.includes('פנס')||name.includes('גמל')||name.includes('השתלמות')?'pension':name.includes('רכב')||name.includes('דירה')||name.includes('בית')?'property':'other'),liquid=a.liquid??(type==='asset'&&['bank','cash'].includes(subtype)),balance=+a.balance||0;return{...a,type,subtype,liquid,balance,originalBalance:type==='liability'?(+a.originalBalance||balance):(+a.originalBalance||0),lender:a.lender||'',balanceAsOf:a.balanceAsOf||migrationTime}});
+ d.wallets=d.wallets.map(w=>{let walletType=w.walletType||(/bit/i.test(w.name||'')?'bit':/(paybox|פייבוקס)/i.test(w.name||'')?'paybox':'other');return{...w,balance:+w.balance||0,walletType,color:w.color||walletPalette[walletType]||walletPalette.other,expiryDate:w.expiryDate||''}});
+ d.transactions=d.transactions.map(t=>({...t,amount:+t.amount||0,kind:t.kind||'expense',reviewed:t.reviewed??true,createdAt:t.createdAt||null}));
+ d.categories=d.categories.map(c=>({...c,icon:c.icon==='apparel'?'checkroom':c.icon||'',budgetBehavior:['fixed','variable'].includes(c.budgetBehavior)?c.budgetBehavior:'auto'}));
+ d.budgetFlexTransfers=d.budgetFlexTransfers.map(x=>({...x,amount:Math.max(0,Math.round((+x.amount||0)*100)/100),type:x.type==='allocate'?'allocate':'collect',createdAt:x.createdAt||migrationTime})).filter(x=>x.id&&x.month&&x.amount>0);
+ d.monthlyOpeningBalances=d.monthlyOpeningBalances.map(x=>({...x,amount:Math.round((+x.amount||0)*100)/100,type:x.type==='cash'?'cash':'bank',source:x.source==='manual'?'manual':'auto',createdAt:x.createdAt||migrationTime})).filter(x=>/^\d{4}-\d{2}$/.test(x.month||''));
+ d.debts=d.debts.map(x=>{let balance=+x.balance||0;return{...x,balance,interest:+x.interest||0,payment:+x.payment||0,originalBalance:+x.originalBalance||balance,lender:x.lender||''}});
+ d.ironBudget=d.ironBudget&&Array.isArray(d.ironBudget.categories)?d.ironBudget:{income:0,categories:[]};
+ d.goals=d.goals.map(g=>{let hadNewSchedule=!!(g.startMonth||g.deadlineMonth),startMonth=g.startMonth||monthKey(),deadlineMonth=g.deadlineMonth||(g.date||'').slice(0,7),term=g.term||(monthsInclusive(startMonth,deadlineMonth)&&monthsInclusive(startMonth,deadlineMonth)<=24?'short':'long');return{...g,target:+g.target||0,current:+g.current||0,monthly:+g.monthly||0,startMonth,deadlineMonth,calculationMode:g.calculationMode||(hadNewSchedule?'auto':'manual'),moneyLocation:g.moneyLocation||'',term}});
+ d.version=17;return d
+}
+let db=migrate(JSON.parse(localStorage.getItem('honSheli')||'null')),current='dashboard',selectedMonth=monthKey(),flowView='transactions',deferredInstall;
+const persist=(cloud=true)=>{localStorage.setItem('honSheli',JSON.stringify(db));if(cloud)window.HONCloud?.queueSync(db)};
+const save=(message='נשמר בהצלחה')=>{persist();render();if(message)toast(message)};
+const cat=id=>db.categories.find(c=>c.id===id)||{name:'ללא קטגוריה',color:'#7b8794',kind:'expense'};
+const account=id=>db.accounts.find(a=>a.id===id)||{name:'ללא חשבון'};
+const monthTx=(m=selectedMonth)=>db.transactions.filter(t=>t.date?.slice(0,7)===m);
+const totals=(m=selectedMonth)=>monthTx(m).reduce((a,t)=>{if(t.kind==='income')a.income+=t.amount;if(t.kind==='expense')a.expense+=t.amount;if(t.kind==='saving')a.saving+=t.amount;if(t.kind==='debt')a.debt+=t.amount;return a},{income:0,expense:0,saving:0,debt:0});
+const sumAccounts=type=>db.accounts.filter(a=>a.type===type).reduce((s,a)=>s+a.balance,0);
+const budgetFor=(m,c)=>db.budgets.find(b=>b.month===m&&b.category===c)?.amount||0;
+const planFor=m=>db.monthPlans.find(p=>p.month===m)||{month:m,income:0};
+const roundBudgetAmount=value=>Math.round((+value||0)*100)/100;
+function budgetSpentFor(m,category){
+ return roundBudgetAmount(monthTx(m).filter(t=>t.kind==='expense'&&t.category===category).reduce((sum,t)=>sum+(+t.amount||0),0))
+}
+function setBudgetAmount(m,category,amount){
+ let row=db.budgets.find(b=>b.month===m&&b.category===category),value=Math.max(0,roundBudgetAmount(amount));
+ if(row)row.amount=value;
+ else db.budgets.push({month:m,category,amount:value});
+ return value
+}
+function adjustBudgetAmount(m,category,change){
+ return setBudgetAmount(m,category,budgetFor(m,category)+roundBudgetAmount(change))
+}
+function flexFundEntries(m=selectedMonth){
+ return db.budgetFlexTransfers.filter(x=>x.month===m).sort((a,b)=>(a.createdAt||'').localeCompare(b.createdAt||''))
+}
+function flexFundBalance(m=selectedMonth){
+ return roundBudgetAmount(flexFundEntries(m).reduce((sum,x)=>sum+(x.type==='collect'?x.amount:-x.amount),0))
+}
+function flexAvailableForCategory(category,m=selectedMonth){
+ return Math.max(0,roundBudgetAmount(budgetFor(m,category)-budgetSpentFor(m,category)))
+}
+function flexCollectedForCategory(category,m=selectedMonth){
+ return roundBudgetAmount(flexFundEntries(m).filter(x=>x.type==='collect'&&x.sourceCategory===category).reduce((sum,x)=>sum+x.amount,0))
+}
+function flexAllocatedForCategory(category,m=selectedMonth){
+ return roundBudgetAmount(flexFundEntries(m).filter(x=>x.type==='allocate'&&x.targetCategory===category).reduce((sum,x)=>sum+x.amount,0))
+}
+function recurringInMonth(m){
+ let nowDay=new Date().getDate(),isCurrent=m===monthKey();
+ return db.recurring.filter(r=>r.active!==false).map(r=>({...r,isFuture:!isCurrent||+r.day>=nowDay}));
+}
+function forecast(m=selectedMonth){
+ let actual=totals(m),recs=recurringInMonth(m),cats=db.categories.filter(c=>c.kind==='expense'),projectedExpense=0;
+ for(const c of cats){
+  let spent=monthTx(m).filter(t=>t.kind==='expense'&&t.category===c.id).reduce((s,t)=>s+t.amount,0);
+  let future=recs.filter(r=>r.isFuture&&r.kind==='expense'&&r.category===c.id).reduce((s,r)=>s+r.amount,0);
+  projectedExpense+=Math.max(spent+future,budgetFor(m,c.id));
+ }
+ let uncategorized=monthTx(m).filter(t=>t.kind==='expense'&&!cats.some(c=>c.id===t.category)).reduce((s,t)=>s+t.amount,0);
+ let futureUncat=recs.filter(r=>r.isFuture&&r.kind==='expense'&&!cats.some(c=>c.id===r.category)).reduce((s,r)=>s+r.amount,0);
+ projectedExpense+=uncategorized+futureUncat;
+ projectedExpense+=Math.max(0,flexFundBalance(m));
+ let plannedIncome=Math.max(actual.income+recs.filter(r=>r.isFuture&&r.kind==='income').reduce((s,r)=>s+r.amount,0),planFor(m).income);
+ let goalCommit=goalMonthlyTotal(m);
+ return{actualIncome:actual.income,actualExpense:actual.expense,projectedIncome:plannedIncome,projectedExpense,goalCommit,free:plannedIncome-projectedExpense-goalCommit};
+}
+function historyMonths(count=6){let arr=[];for(let i=count-1;i>=0;i--){let m=monthShift(-i),t=totals(m);arr.push({m,label:new Date(m+'-15').toLocaleDateString('he-IL',{month:'short'}),...t})}return arr}
+function healthScore(){
+ const f=forecast(monthKey());
+ const assets=sumAccounts('asset')+(db.wallets||[]).reduce((s,w)=>s+(+w.balance||0),0);
+ const liabilities=sumAccounts('liability');
+ let score=20;
+ const notes=[];
+ if(f.projectedIncome>0){
+  const rate=f.free/f.projectedIncome;
+  if(rate>=.2){score+=25;notes.push('שיעור החיסכון המתוכנן חזק');}
+  else if(rate>=0){score+=15;notes.push('התזרים מאוזן אך מרווח הביטחון קטן');}
+  else{notes.push('התזרים החזוי שלילי');}
+ }
+ if(!liabilities){score+=20;}
+ else if(assets>0&&liabilities/assets<.35){score+=20;notes.push('יחס החוב לנכסים בריא');}
+ else{notes.push('כדאי לצמצם את יחס החוב');}
+ if(db.budgets.some(b=>b.month===monthKey())){score+=15;}else{notes.push('עוד לא נבנה תקציב לחודש');}
+ if(db.goals.length){score+=10;}else{notes.push('כדאי להגדיר יעד אחד לפחות');}
+ if(db.snapshots.length>=2){score+=10;}
+ return {score:Math.min(100,score),notes};
+}
+function insights(m=selectedMonth){
+ let t=totals(m),f=forecast(m),prev=totals(monthShift(-1)),out=[];
+ if(!t.income&&!t.expense)return['לאחר שתוסיף תנועות, HON תזהה עבורך דפוסים והזדמנויות.'];
+ out.push(f.free>=0?`אחרי כל ההוצאות והיעדים צפויים להישאר החודש ${money(f.free)}.`:`לפי התכנון צפוי חוסר של ${money(-f.free)} עד סוף החודש.`);
+ if(prev.expense)out.push(`ההוצאות החודש ${t.expense<=prev.expense?'נמוכות':'גבוהות'} ב־${Math.abs((t.expense/prev.expense-1)*100).toFixed(0)}% מהחודש הקודם.`);
+ let cats=db.categories.map(c=>({name:c.name,total:monthTx(m).filter(x=>x.kind==='expense'&&x.category===c.id).reduce((s,x)=>s+x.amount,0)})).sort((a,b)=>b.total-a.total);
+ if(cats[0]?.total)out.push(`הקטגוריה הגדולה ביותר היא ${cats[0].name}: ${money(cats[0].total)}.`);
+ return out
+}
+
+const pages=[
+ ['dashboard','◫','סקירה'],['cashflow','⌁','תקציב ותזרים'],
+ ['wealth','◇','הון עצמי'],['wallets','◈','ארנקים'],['goals','◎','מטרות'],['debts','↘','חובות'],['history','◷','היסטוריה חודשית'],['review','✓','סגירת חודש'],['settings','⚙','הגדרות']
+];
+const mobilePrimaryPages=['dashboard','cashflow','wealth','goals'];
+function nav(){
+ $('#nav').innerHTML=pages.map(([id,ic,n])=>`<button class="nav-btn ${id===current?'active':''}" data-page="${id}"><span>${ic}</span>${n}</button>`).join('');
+ let mobile=pages.filter(x=>mobilePrimaryPages.includes(x[0])),moreActive=!mobilePrimaryPages.includes(current);
+ $('#mobileNav').innerHTML=mobile.map(([id,ic,n])=>`<button class="nav-btn ${id===current?'active':''}" data-page="${id}"><span>${ic}</span>${n}</button>`).join('')+`<button class="nav-btn ${moreActive?'active':''}" id="mobileMore" type="button"><span>☰</span>עוד</button>`
+}
+function openMobilePages(){
+ let extra=pages.filter(([id])=>!mobilePrimaryPages.includes(id));
+ let isDark=document.documentElement.classList.contains('dark');
+ modal('כל הדפים',`<button type="button" class="mobile-theme-toggle" id="mobileThemeToggle" aria-pressed="${isDark}"><span>${isDark?'☀':'☾'}</span><div><b>${isDark?'מעבר למצב בהיר':'מעבר למצב כהה'}</b><small>${isDark?'תצוגה בהירה ונקייה':'נוח יותר בערב ובלילה'}</small></div><i>${isDark?'בהיר':'כהה'}</i></button><div class="mobile-page-grid">${extra.map(([id,ic,n])=>`<button type="button" class="mobile-page-btn ${id===current?'active':''}" data-mobile-page="${id}"><span>${ic}</span><b>${n}</b></button>`).join('')}</div><button type="button" class="ghost full-btn" data-close-mobile>סגירה</button>`,()=>{});
+ $('#mobileThemeToggle').onclick=()=>{toggleTheme();openMobilePages()};
+ $$('[data-mobile-page]').forEach(b=>b.onclick=()=>{current=b.dataset.mobilePage;$('#modal').hidden=true;render()});
+ $('[data-close-mobile]').onclick=()=>$('#modal').hidden=true
+}
+function heading(t,s=''){ $('#title').textContent=t;$('#subtitle').textContent=s }
+function monthPicker(){return `<div class="month-switch"><button class="ghost" data-month="-1">‹</button><b>${monthName(selectedMonth)}</b><button class="ghost" data-month="1">›</button></div>`}
+function bind(){
+ $$('[data-page]').forEach(b=>b.onclick=()=>{current=b.dataset.page;render()});
+ if($('#mobileMore'))$('#mobileMore').onclick=openMobilePages;
+ $$('[data-action]').forEach(b=>b.onclick=()=>actions[b.dataset.action]?.(b.dataset.id));
+ $$('[data-global-add]').forEach(b=>b.onclick=()=>actions.addTx());
+ $$('[data-month]').forEach(b=>b.onclick=()=>{let d=new Date(selectedMonth+'-15');d.setMonth(d.getMonth()+Number(b.dataset.month));selectedMonth=monthKey(d);render()})
+}
+function monthlyHistory(){heading('היסטוריה חודשית','הסיפור הפיננסי של כל חודש במקום אחד');$('#view').innerHTML=`<div class="card"><h2>${monthName(selectedMonth)}</h2><p class="muted">הסיכום החודשי נטען…</p></div>`}
+function render(){document.documentElement.classList.toggle('goals-page-active',current==='goals'&&(mobileDevice||window.innerWidth<=720));nav();({dashboard,cashflow,transactions,budget,recurring,wealth,wallets,goals,debts,reports,history:monthlyHistory,review,settings})[current]();bind();decorateBudgetCards();decorateSmartUi()}
+function txRow(t){
+ let c=cat(t.category),sign=t.kind==='income'?'+':t.kind==='transfer'?'↔':'−';
+ return `<div class="row tx-row"><div class="tx-icon" style="background:${c.color}18;color:${c.color}">${t.kind==='income'?'↓':t.kind==='transfer'?'↔':'↑'}</div><div class="grow"><b>${esc(t.note||c.name)}</b><small class="muted">${esc(c.name)} · ${new Date(t.date+'T12:00:00').toLocaleDateString('he-IL')}</small></div><strong class="${t.kind==='income'?'up':t.kind==='transfer'?'':'down'}">${sign}${money(t.amount)}</strong><button class="mini-btn" data-action="editTx" data-id="${t.id}">⋮</button></div>`
+}
+function empty(icon,title,text){return `<div class="empty"><div class="empty-icon">${icon}</div><b>${title}</b>${text}</div>`}
+
+function dashboard(){
+ heading(`שלום ${db.settings.name||''}, זו התמונה שלך`,`יום ${new Date().toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long'})}`);
+ let t=totals(monthKey()),f=forecast(monthKey()),net=sumAccounts('asset')-sumAccounts('liability'),daily=Math.max(0,f.free/daysLeft()),h=historyMonths(),mx=Math.max(1,...h.flatMap(x=>[x.income,x.expense])),health=healthScore(),recent=[...db.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4);
+ $('#view').innerHTML=`
+ <div class="grid stats">
+  <div class="card hero-card stat"><small>ההון הנקי</small><strong>${money(net)}</strong><span class="trend">נכסים פחות התחייבויות</span></div>
+  <div class="card stat"><small>צפי לסוף החודש</small><strong class="${f.free>=0?'up':'down'}">${money(f.free)}</strong><span class="trend">לאחר הוצאות ויעדי חיסכון</span></div>
+  <div class="card stat"><small>בטוח להוצאה יומית</small><strong>${money(daily)}</strong><span class="trend">${daysLeft()} ימים נותרו החודש</span></div>
+  <div class="card stat"><small>חיסכון בפועל</small><strong class="up">${money(t.saving)}</strong><span class="trend">${db.goals.length} מטרות פעילות</span></div>
+ </div>
+ <div class="grid two section-space">
+  <div class="card"><div class="card-head"><div><h3>תזרים חצי־שנתי</h3><small class="muted">הכנסות מול הוצאות</small></div><span class="legend"><i class="dot green"></i>הכנסה <i class="dot soft"></i>הוצאה</span></div><div class="mini-chart">${h.map(x=>`<div><i style="height:${x.expense/mx*100}%"></i><i style="height:${x.income/mx*100}%"></i></div>`).join('')}</div><div class="chart-labels">${h.map(x=>`<span>${x.label}</span>`).join('')}</div></div>
+  <div class="card"><div class="card-head"><div><h3>בריאות פיננסית</h3><small class="muted">מדד שקוף לפי חמישה תחומים</small></div></div><div class="health"><div class="ring" style="--p:${health.score}" data-value="${health.score}"></div><div><h4>${health.score>=80?'מצב מצוין':health.score>=60?'בדרך הנכונה':health.score>=40?'צריך לחזק':'דורש פעולה'}</h4><p class="muted">${health.notes[0]||'המשיכו כך'}</p></div></div><button class="ghost full-btn" data-page="review">לבדיקת החודש המלאה</button></div>
+ </div>
+ <div class="grid two section-space">
+  <div class="card"><div class="card-head"><div><h3>פעילות אחרונה</h3><small class="muted">${db.transactions.length} תנועות בסך הכול</small></div><button class="ghost" data-action="addTx">＋ תנועה</button></div>${recent.length?recent.map(txRow).join(''):empty('＋','מתחילים מכאן','הוסף הכנסה או הוצאה ראשונה')}</div>
+  <div class="card"><div class="card-head"><div><h3>הפעולה הבאה שלך</h3><small class="muted">המלצה לפי הנתונים</small></div></div>${insights(monthKey()).map(x=>`<div class="insight">${x}</div>`).join('')}<button class="primary full-btn" data-page="${!db.budgets.some(b=>b.month===monthKey())?'budget':f.free<0?'cashflow':'goals'}">${!db.budgets.some(b=>b.month===monthKey())?'בניית תקציב':f.free<0?'איזון התזרים':'התקדמות במטרות'}</button></div>
+ </div>`
+}
+
+function cashflow(){
+ heading('תזרים חזוי','לדעת היום מה צפוי לקרות עד סוף החודש');let f=forecast(),recs=recurringInMonth(selectedMonth),t=totals();
+ let events=[...monthTx().map(x=>({date:x.date,name:x.note||cat(x.category).name,amount:x.amount,kind:x.kind,status:'בוצע'})),...recs.map(r=>({date:selectedMonth+'-'+String(r.day).padStart(2,'0'),name:r.name,amount:r.amount,kind:r.kind,status:r.isFuture?'צפוי':'עבר'}))].sort((a,b)=>a.date.localeCompare(b.date));
+ $('#view').innerHTML=`${monthPicker()}<div class="grid stats section-space"><div class="card stat"><small>הכנסה צפויה</small><strong class="up">${money(f.projectedIncome)}</strong></div><div class="card stat"><small>הוצאה צפויה</small><strong class="down">${money(f.projectedExpense)}</strong></div><div class="card stat"><small>למטרות וחיסכון</small><strong>${money(f.goalCommit)}</strong></div><div class="card hero-card stat"><small>צפי לסוף החודש</small><strong>${money(f.free)}</strong></div></div><div class="grid two section-space"><div class="card"><div class="card-head"><h3>ציר הזמן של החודש</h3><button class="ghost" data-action="addRecurring">＋ קבועה</button></div>${events.length?events.map(e=>`<div class="row"><div><b>${esc(e.name)}</b><small class="muted">${new Date(e.date+'T12:00').toLocaleDateString('he-IL',{day:'numeric',month:'short'})} · ${e.status}</small></div><strong class="${e.kind==='income'?'up':'down'}">${e.kind==='income'?'+':'−'}${money(e.amount)}</strong></div>`).join(''):empty('⌁','אין עדיין תנועות','הוסף תנועות קבועות כדי לקבל תחזית')}</div><div class="card"><h3>פירוש התחזית</h3><div class="forecast-formula"><span>${money(f.projectedIncome)}<small>הכנסות</small></span><b>−</b><span>${money(f.projectedExpense)}<small>הוצאות</small></span><b>−</b><span>${money(f.goalCommit)}<small>מטרות</small></span><b>=</b><span class="${f.free>=0?'up':'down'}">${money(f.free)}<small>צפי</small></span></div>${insights().map(x=>`<div class="insight">${x}</div>`).join('')}</div></div>`
+}
+
+function transactions(){
+ heading('כל התנועות','חיפוש, סינון, עריכה ובקרה');let q=($('#txSearch')?.value||'').toLowerCase(),rows=[...db.transactions].sort((a,b)=>b.date.localeCompare(a.date));
+ $('#view').innerHTML=`<div class="toolbar"><button class="primary" data-action="addTx">＋ תנועה חדשה</button><button class="ghost" data-action="addCat">＋ קטגוריה</button><input id="txSearch" placeholder="חיפוש בתנועות…"><select id="txKind"><option value="">כל הסוגים</option><option value="income">הכנסות</option><option value="expense">הוצאות</option><option value="saving">חיסכון</option><option value="transfer">העברות</option><option value="debt">החזר חוב</option></select></div><div class="card table-wrap" id="txList">${rows.length?`<table><thead><tr><th>תאריך</th><th>תיאור</th><th>קטגוריה</th><th>חשבון</th><th>סוג</th><th>סכום</th><th></th></tr></thead><tbody>${rows.map(t=>`<tr data-kind="${t.kind}" data-search="${esc((t.note+' '+cat(t.category).name).toLowerCase())}"><td>${new Date(t.date+'T12:00').toLocaleDateString('he-IL')}</td><td><b>${esc(t.note||'-')}</b></td><td><i class="dot" style="background:${cat(t.category).color}"></i>${esc(cat(t.category).name)}</td><td>${esc(account(t.account).name)}</td><td>${typeName(t.kind)}</td><td class="${t.kind==='income'?'up':t.kind==='transfer'?'':'down'}"><b>${money(t.amount)}</b></td><td><button class="mini-btn" data-action="editTx" data-id="${t.id}">עריכה</button></td></tr>`).join('')}</tbody></table>`:empty('↕','אין תנועות','הוסף את התנועה הראשונה שלך')}</div>`;
+ $('#txSearch').oninput=filterTx;$('#txKind').onchange=filterTx
+}
+function filterTx(){let q=$('#txSearch').value.toLowerCase(),k=$('#txKind').value;$$('#txList tbody tr').forEach(r=>r.hidden=!!((q&&!r.dataset.search.includes(q))||(k&&r.dataset.kind!==k)))}
+const typeName=k=>({income:'הכנסה',expense:'הוצאה',saving:'חיסכון',transfer:'העברה',debt:'החזר חוב'}[k]||k);
+
+function budget(){
+ heading('התקציב החכם','כל שקל מקבל תפקיד לפני שהוא יוצא');let cats=db.categories.filter(c=>c.kind==='expense'),plan=planFor(selectedMonth),allocated=cats.reduce((s,c)=>s+budgetFor(selectedMonth,c.id),0)+db.goals.reduce((s,g)=>s+(g.monthly||0),0),left=plan.income-allocated;
+ $('#view').innerHTML=`${monthPicker()}<div class="grid three section-space"><div class="card stat"><small>הכנסה מתוכננת</small><strong>${money(plan.income)}</strong></div><div class="card stat"><small>הוקצה להוצאות ולמטרות</small><strong>${money(allocated)}</strong></div><div class="card ${left<0?'warning-card':'hero-card'} stat"><small>נותר להקצאה</small><strong>${money(left)}</strong></div></div><div class="card section-space"><div class="card-head"><div><h3>קטגוריות התקציב</h3><small class="muted">מתוכנן מול מה שיצא בפועל</small></div><div><button class="ghost" data-action="copyBudget">העתקה מחודש קודם</button> <button class="primary" data-action="setBudget">עריכת תקציב</button></div></div>${cats.map(c=>{let planned=budgetFor(selectedMonth,c.id),actual=monthTx().filter(t=>t.kind==='expense'&&t.category===c.id).reduce((s,t)=>s+t.amount,0),p=planned?Math.min(100,actual/planned*100):0;return `<div class="budget-row"><div><i class="dot" style="background:${c.color}"></i><b>${esc(c.name)}</b></div><div><div class="progress"><i style="width:${p}%;background:${actual>planned&&planned?'var(--red)':c.color}"></i></div><small>${money(actual)} מתוך ${money(planned)} · נשאר ${money(Math.max(0,planned-actual))}</small></div><b class="${actual>planned&&planned?'down':''}">${planned?Math.round(actual/planned*100):0}%</b></div>`}).join('')}</div>`
+}
+
+function recurring(){
+ heading('תנועות קבועות','כל מה שצפוי לפני שהוא מפתיע');let rows=[...db.recurring].sort((a,b)=>a.day-b.day),inc=rows.filter(r=>r.kind==='income').reduce((s,r)=>s+r.amount,0),exp=rows.filter(r=>r.kind==='expense').reduce((s,r)=>s+r.amount,0);
+ $('#view').innerHTML=`<div class="grid three"><div class="card stat"><small>הכנסות קבועות</small><strong class="up">${money(inc)}</strong></div><div class="card stat"><small>הוצאות קבועות</small><strong class="down">${money(exp)}</strong></div><div class="card stat"><small>מאזן קבוע</small><strong>${money(inc-exp)}</strong></div></div><div class="card section-space"><div class="card-head"><div><h3>לוח קבועות</h3><small class="muted">${rows.length} תנועות חוזרות מדי חודש</small></div><button class="primary" data-action="addRecurring">＋ תנועה קבועה</button></div>${rows.length?rows.map(r=>`<div class="row"><div class="date-box"><b>${r.day}</b><small>בחודש</small></div><div class="grow"><b>${esc(r.name)}</b><small class="muted">${esc(cat(r.category).name)} · ${r.active===false?'מושהה':'פעילה'}</small></div><strong class="${r.kind==='income'?'up':'down'}">${r.kind==='income'?'+':'−'}${money(r.amount)}</strong><button class="mini-btn" data-action="editRecurring" data-id="${r.id}">עריכה</button></div>`).join(''):empty('↻','אין תנועות קבועות','הוסף משכורת, שכירות, חשבונות ומנויים')}</div>`
+}
+
+function wealth(){
+ heading('הון עצמי','לראות שהמשפחה באמת מתקדמת');let assets=db.accounts.filter(a=>a.type==='asset'),liabs=db.accounts.filter(a=>a.type==='liability'),net=sumAccounts('asset')-sumAccounts('liability'),history=[...db.snapshots].sort((a,b)=>a.month.localeCompare(b.month));
+ $('#view').innerHTML=`<div class="grid three"><div class="card stat"><small>נכסים</small><strong class="up">${money(sumAccounts('asset'))}</strong></div><div class="card stat"><small>התחייבויות</small><strong class="down">${money(sumAccounts('liability'))}</strong></div><div class="card hero-card stat"><small>הון נקי</small><strong>${money(net)}</strong></div></div><div class="grid two section-space"><div class="card"><div class="card-head"><h3>חשבונות ונכסים</h3><button class="primary" data-action="addAccount">＋ חשבון</button></div>${assets.map(accountRow).join('')||empty('◇','אין נכסים','הוסף עו״ש, חיסכון, השקעות או רכוש')}<h3 class="subhead">התחייבויות</h3>${liabs.map(accountRow).join('')||'<p class="muted">אין התחייבויות רשומות</p>'}</div><div class="card"><div class="card-head"><div><h3>התקדמות ההון</h3><small class="muted">צילום מצב חודשי</small></div><button class="ghost" data-action="snapshot">שמירת החודש</button></div>${history.length?history.slice(-12).map((s,i)=>`<div class="row"><span>${monthName(s.month)}</span><b class="${i&&s.net>=history[i-1]?.net?'up':''}">${money(s.net)}</b></div>`).join(''):empty('▥','אין עדיין היסטוריה','שמור צילום מצב בסוף כל חודש')}</div></div>`
+}
+function accountRow(a){return `<div class="row"><div><b>${esc(a.name)}</b><small class="muted">${a.type==='asset'?'נכס':'התחייבות'}</small></div><strong>${money(a.balance)}</strong><button class="mini-btn" data-action="editAccount" data-id="${a.id}">עריכה</button></div>`}
+
+function goals(){
+ heading('מטרות וחלומות','תוכנית מספרית לכל דבר שחשוב למשפחה');$('#view').innerHTML=`<div class="toolbar"><button class="primary" data-action="addGoal">＋ מטרה חדשה</button></div><div class="grid three">${db.goals.length?db.goals.map(g=>{let p=Math.min(100,g.current/g.target*100||0),months=g.monthly?Math.ceil(Math.max(0,g.target-g.current)/g.monthly):0,needed=g.date?monthlyNeeded(g):0;return `<div class="card goal-card"><div class="card-head"><span class="goal-icon">◎</span><button class="mini-btn" data-action="editGoal" data-id="${g.id}">עריכה</button></div><h3>${esc(g.name)}</h3><div class="goal-value"><strong>${money(g.current)}</strong><span>מתוך ${money(g.target)}</span></div><div class="progress"><i style="width:${p}%"></i></div><div class="goal-meta"><span>${p.toFixed(0)}% הושלם</span><span>${months?months+' חודשים בקצב הנוכחי':needed?money(needed)+' נדרש בחודש':'לא הוגדרה הפקדה'}</span></div><button class="primary full-btn" data-action="deposit" data-id="${g.id}">הפקדה למטרה</button></div>`}).join(''):empty('◎','אין עדיין מטרות','קרן חירום, בית, חופשה או עתיד הילדים')}</div>`
+}
+function monthlyNeeded(g){let end=new Date(g.date+'T12:00'),now=new Date(),months=Math.max(1,(end.getFullYear()-now.getFullYear())*12+end.getMonth()-now.getMonth());return Math.max(0,g.target-g.current)/months}
+
+function debts(){
+ heading('תוכנית יציאה מחובות','לראות את הסוף ולבחור את הדרך המהירה');let total=db.debts.reduce((s,d)=>s+d.balance,0),monthly=db.debts.reduce((s,d)=>s+d.payment,0);
+ $('#view').innerHTML=`<div class="grid three"><div class="card stat"><small>יתרת חובות</small><strong class="down">${money(total)}</strong></div><div class="card stat"><small>החזר חודשי</small><strong>${money(monthly)}</strong></div><div class="card hero-card stat"><small>חוב הבא לסגירה</small><strong>${esc([...db.debts].sort((a,b)=>a.balance-b.balance)[0]?.name||'אין')}</strong></div></div><div class="toolbar section-space"><button class="primary" data-action="addDebt">＋ הוספת חוב</button></div><div class="grid two">${db.debts.length?db.debts.map(d=>{let sim=debtCalc(d,0),fast=debtCalc(d,200);return `<div class="card"><div class="card-head"><div><h3>${esc(d.name)}</h3><small class="muted">${d.interest}% ריבית שנתית</small></div><button class="mini-btn" data-action="editDebt" data-id="${d.id}">עריכה</button></div><strong class="debt-balance">${money(d.balance)}</strong><div class="row"><span>החזר חודשי</span><b>${money(d.payment)}</b></div><div class="row"><span>סיום משוער</span><b>${sim.months>=600?'לא ניתן לחשב':sim.months+' חודשים'}</b></div><div class="insight">תוספת של 200 ₪ בחודש תחסוך כ־${Math.max(0,sim.months-fast.months)} חודשים וכ־${money(Math.max(0,sim.interest-fast.interest))} ריבית.</div></div>`}).join(''):empty('↘','אין חובות רשומים','הוסף הלוואה כדי לבנות תוכנית סגירה')}</div>`
+}
+function debtCalc(d,extra=0){let b=+d.balance,r=(+d.interest||0)/1200,p=(+d.payment||0)+extra,months=0,interest=0;if(p<=b*r)return{months:600,interest:0};while(b>0&&months<600){let i=b*r;interest+=i;b-=Math.max(0,p-i);months++}return{months,interest}}
+
+function reports(){
+ heading('דוחות ותובנות','להפוך מספרים להחלטות');let h=historyMonths(12),t=totals(),cats=db.categories.filter(c=>c.kind==='expense').map(c=>({...c,total:monthTx().filter(x=>x.kind==='expense'&&x.category===c.id).reduce((s,x)=>s+x.amount,0)})).filter(c=>c.total).sort((a,b)=>b.total-a.total),max=Math.max(1,...cats.map(c=>c.total)),avg=h.reduce((s,x)=>s+x.expense,0)/h.length;
+ $('#view').innerHTML=`${monthPicker()}<div class="grid three section-space"><div class="card stat"><small>ממוצע הוצאות</small><strong>${money(avg)}</strong><span class="trend">12 חודשים</span></div><div class="card stat"><small>שיעור חיסכון</small><strong class="${t.income-t.expense>=0?'up':'down'}">${t.income?((t.income-t.expense)/t.income*100).toFixed(0):0}%</strong></div><div class="card stat"><small>הוצאה יומית ממוצעת</small><strong>${money(t.expense/Math.max(1,new Date().getDate()))}</strong></div></div><div class="grid two section-space"><div class="card"><div class="card-head"><h3>פילוח הוצאות</h3></div>${cats.length?cats.map(c=>`<div class="barline"><span><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</span><div class="bar"><i style="width:${c.total/max*100}%;background:${c.color}"></i></div><b>${money(c.total)}</b></div>`).join(''):empty('▥','אין מספיק מידע','הוסף הוצאות כדי לראות פילוח')}</div><div class="card"><div class="card-head"><h3>HON Insights</h3><span class="badge">אוטומטי</span></div>${insights().map((x,i)=>`<div class="insight"><b>${i+1}.</b> ${x}</div>`).join('')}<div class="insight"><b>הצעד המומלץ:</b> ${forecast().free<0?'צמצם את הקטגוריה הגדולה ביותר או עדכן את התקציב.':'העבר חלק מהיתרה החזויה למטרה בעדיפות הגבוהה ביותר.'}</div></div></div>`
+}
+
+function review(){
+ heading('סגירת חודש','עשר דקות שמייצרות חודש טוב יותר');let t=totals(),f=forecast(),existing=db.reviews.find(r=>r.month===selectedMonth)||{},unreviewed=monthTx().filter(t=>!t.reviewed).length;
+ $('#view').innerHTML=`${monthPicker()}<div class="review-steps"><span class="done">1. תמונת מצב</span><span class="${unreviewed?'':'done'}">2. אימות תנועות</span><span>3. למידה</span><span>4. החלטה</span></div><div class="grid two section-space"><div class="card"><h3>החודש במספרים</h3><div class="row"><span>הכנסות</span><b class="up">${money(t.income)}</b></div><div class="row"><span>הוצאות</span><b class="down">${money(t.expense)}</b></div><div class="row"><span>חיסכון והפקדות</span><b>${money(t.saving)}</b></div><div class="row"><span>צפי לסיום</span><b class="${f.free>=0?'up':'down'}">${money(f.free)}</b></div><div class="row"><span>תנועות לבדיקה</span><b>${unreviewed}</b></div>${insights().map(x=>`<div class="insight">${x}</div>`).join('')}</div><div class="card"><h3>הפקת לקחים</h3><form id="reviewForm" class="form-grid"><label class="full">הניצחון של החודש<textarea name="win" rows="2">${esc(existing.win||'')}</textarea></label><label class="full">מה הפתיע או לא עבד?<textarea name="improve" rows="2">${esc(existing.improve||'')}</textarea></label><label class="full">מה למדנו על ההתנהלות שלנו?<textarea name="lesson" rows="2">${esc(existing.lesson||'')}</textarea></label><label class="full">החלטה אחת לחודש הבא<textarea name="decision" rows="2">${esc(existing.decision||'')}</textarea></label><button class="primary full">סגירת החודש ושמירת הלקחים</button></form></div></div>`;
+ $('#reviewForm').onsubmit=e=>{e.preventDefault();let x=Object.fromEntries(new FormData(e.target));db.reviews=db.reviews.filter(r=>r.month!==selectedMonth);db.reviews.push({...x,month:selectedMonth,closedAt:new Date().toISOString()});db.transactions.forEach(t=>{if(t.date?.startsWith(selectedMonth))t.reviewed=true});actions.snapshot(null,false);save('החודש נסגר והלקחים נשמרו')}
+}
+
+function settings(){
+ heading('הגדרות, קטגוריות וגיבוי','שליטה מלאה במידע המשפחתי');$('#view').innerHTML=`<div class="grid two"><div class="card"><h3>המשפחה</h3><br><label>השם שיופיע באפליקציה<input id="userName" value="${esc(db.settings.name)}"></label><br><button class="primary" data-action="saveName">שמירה</button></div><div class="card"><h3>גיבוי והעברה</h3><p class="muted">הורד גיבוי מלא ושמור אותו במקום פרטי ובטוח. אפשר לשחזר אותו בטלפון או במחשב אחר.</p><button class="primary" data-action="export">הורדת גיבוי מלא</button> <label class="ghost upload">שחזור מגיבוי<input id="importFile" type="file" accept=".json" hidden></label></div><div class="card"><div class="card-head"><h3>קטגוריות</h3><button class="ghost" data-action="addCat">＋ חדשה</button></div>${db.categories.map(c=>`<div class="row"><span><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</span><small>${typeName(c.kind)}</small><button class="mini-btn" data-action="editCat" data-id="${c.id}">עריכה</button></div>`).join('')}</div><div class="card"><h3>פרטיות ותחזוקה</h3><p>המידע נשמר מקומית במכשיר ואינו נשלח אלינו. מחיקת נתוני הדפדפן תמחק אותו, לכן חשוב לגבות.</p><div class="insight">גרסת נתונים: ${db.version} · ${db.transactions.length} תנועות · ${db.accounts.length} חשבונות</div><button class="danger" data-action="reset">מחיקת כל הנתונים</button></div></div>`;$('#importFile').onchange=importData
+}
+
+function modal(title,html,onSubmit){
+ $('#modal').classList.remove('stitch-flex-modal');$('#modalTitle').textContent=title;$('#form').innerHTML=html;$('#modal').hidden=false;
+ $('#form').onsubmit=e=>{e.preventDefault();onSubmit(Object.fromEntries(new FormData(e.target)));$('#modal').hidden=true}
+}
+const field={
+ actions:`<div class="form-actions full"><button class="primary">שמירה</button><button type="button" class="ghost" data-close-modal>ביטול</button></div>`,
+ kind:v=>`<label>סוג<select name="kind" id="kindField"><option value="expense" ${v==='expense'?'selected':''}>הוצאה</option><option value="income" ${v==='income'?'selected':''}>הכנסה</option><option value="saving" ${v==='saving'?'selected':''}>חיסכון</option><option value="transfer" ${v==='transfer'?'selected':''}>העברה</option><option value="debt" ${v==='debt'?'selected':''}>החזר חוב</option></select></label>`,
+ categories:(kind='expense',selected='')=>`<label>קטגוריה<select name="category" id="catField">${db.categories.filter(c=>c.kind===kind||kind==='expense'&&c.kind==='saving').sort((a,b)=>a.name.localeCompare(b.name,'he')).map(c=>`<option value="${c.id}" ${c.id===selected?'selected':''}>${esc(c.name)}</option>`).join('')}</select></label>`,
+ accounts:selected=>`<label>חשבון<select name="account"><option value="">לא נבחר</option>${db.accounts.map(a=>`<option value="${a.id}" ${a.id===selected?'selected':''}>${esc(a.name)}</option>`).join('')}</select></label>`
+};
+function txForm(t={}){
+ return `<div class="form-grid">${field.kind(t.kind||'expense')}<label>סכום<input name="amount" type="number" min="0.01" step="0.01" value="${t.amount||''}" required></label><label>תאריך<input name="date" type="date" value="${t.date||today()}" required></label>${field.categories(t.kind||'expense',t.category)}${field.accounts(t.account)}<label class="full">תיאור<input name="note" value="${esc(t.note||'')}" placeholder="למשל: קניות לשבת"></label><label class="check full"><input name="reviewed" type="checkbox" ${t.reviewed!==false?'checked':''}> התנועה נבדקה ואושרה</label></div>${field.actions}`
+}
+const actions={
+ addTx(){modal('תנועה חדשה',txForm(),x=>{db.transactions.push({...x,id:uid(),amount:+x.amount,reviewed:x.reviewed==='on'});save('התנועה נוספה')});bindDynamicKind()},
+ editTx(id){let t=db.transactions.find(x=>x.id===id);modal('עריכת תנועה',txForm(t)+`<button type="button" class="danger" id="deleteInside">מחיקת התנועה</button>`,x=>{Object.assign(t,x,{amount:+x.amount,reviewed:x.reviewed==='on'});save()});$('#deleteInside').onclick=()=>{if(confirm('למחוק את התנועה?')){db.transactions=db.transactions.filter(x=>x.id!==id);$('#modal').hidden=true;save('התנועה נמחקה')}};bindDynamicKind()},
+ addCat(){editCategory()},
+ editCat:id=>editCategory(db.categories.find(c=>c.id===id)),
+ addAccount(){editAccount()},
+ editAccount:id=>editAccount(db.accounts.find(a=>a.id===id)),
+ addRecurring(){editRecurring()},
+ editRecurring:id=>editRecurring(db.recurring.find(r=>r.id===id)),
+ addGoal(){editGoal()},
+ editGoal:id=>editGoal(db.goals.find(g=>g.id===id)),
+ deposit(id){let g=db.goals.find(x=>x.id===id);modal('הפקדה למטרה',`<label>סכום ההפקדה<input name="amount" type="number" min="1" required></label>${field.actions}`,x=>{g.current+=+x.amount;db.transactions.push({id:uid(),date:today(),kind:'saving',amount:+x.amount,category:db.categories.find(c=>c.kind==='saving')?.id,note:`הפקדה: ${g.name}`,reviewed:true});save('ההפקדה נרשמה')})},
+ addDebt(){editDebt()},
+ editDebt:id=>editDebt(db.debts.find(d=>d.id===id)),
+ setBudget(){let cats=db.categories.filter(c=>c.kind==='expense'),plan=planFor(selectedMonth);modal(`תקציב ${monthName(selectedMonth)}`,`<div class="form-grid"><label class="full">הכנסה מתוכננת<input name="_income" type="number" min="0" value="${plan.income||''}"></label>${cats.map(c=>`<label>${esc(c.name)}<input name="${c.id}" type="number" min="0" value="${budgetFor(selectedMonth,c.id)||''}"></label>`).join('')}</div>${field.actions}`,x=>{db.monthPlans=db.monthPlans.filter(p=>p.month!==selectedMonth);db.monthPlans.push({month:selectedMonth,income:+x._income||0});delete x._income;db.budgets=db.budgets.filter(b=>b.month!==selectedMonth);Object.entries(x).forEach(([category,amount])=>db.budgets.push({month:selectedMonth,category,amount:+amount||0}));save('התקציב נשמר')})},
+ copyBudget(){let prev=new Date(selectedMonth+'-15');prev.setMonth(prev.getMonth()-1);let pm=monthKey(prev),prevItems=db.budgets.filter(b=>b.month===pm);if(!prevItems.length)return toast('אין תקציב בחודש הקודם');if(confirm('להחליף את תקציב החודש בתקציב הקודם?')){db.budgets=db.budgets.filter(b=>b.month!==selectedMonth);prevItems.forEach(b=>db.budgets.push({...b,month:selectedMonth}));let pp=planFor(pm);db.monthPlans=db.monthPlans.filter(p=>p.month!==selectedMonth);db.monthPlans.push({...pp,month:selectedMonth});save('התקציב הועתק')}},
+ snapshot(id,notify=true){let net=sumAccounts('asset')-sumAccounts('liability'),existing=db.snapshots.find(s=>s.month===selectedMonth);if(existing){existing.assets=sumAccounts('asset');existing.liabilities=sumAccounts('liability');existing.net=net}else db.snapshots.push({month:selectedMonth,assets:sumAccounts('asset'),liabilities:sumAccounts('liability'),net});persist();if(notify)save('צילום ההון נשמר')},
+ saveName(){db.settings.name=$('#userName').value.trim();save()},
+ export(){let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(db,null,2)],{type:'application/json'}));a.download=`HON-backup-${today()}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)},
+ exportCsv(){let rows=[['date','kind','amount','category','account','note'],...db.transactions.map(t=>[t.date,t.kind,t.amount,cat(t.category).name,account(t.account).name,t.note||''])],csv=rows.map(r=>r.map(v=>`"${String(v).replaceAll('"','""')}"`).join(',')).join('\n'),a=document.createElement('a');a.href=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv'}));a.download=`HON-transactions-${today()}.csv`;a.click()},
+ reset(){if(confirm('כל הנתונים יימחקו מהמכשיר. הפעולה אינה ניתנת לביטול. להמשיך?')){db=migrate(null);persist();render();toast('הנתונים נמחקו')}}
+};
+function bindDynamicKind(){setTimeout(()=>{let k=$('#kindField');if(k)k.onchange=()=>{$('#catField').innerHTML=db.categories.filter(c=>c.kind===k.value||k.value==='saving'&&c.kind==='saving').map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')};$$('[data-close-modal]').forEach(b=>b.onclick=()=>$('#modal').hidden=true)},0)}
+function editCategory(c={}){
+ let selectedColor=c.color||categoryPalette[0].value,selectedIcon=categoryIconName(c);
+ modal(c.id?'עריכת קטגוריה':'קטגוריה חדשה',`<div class="form-grid"><label>שם<input name="name" value="${esc(c.name||'')}" required></label><label>סוג<select name="kind" id="categoryKind"><option value="expense" ${!c.kind||c.kind==='expense'?'selected':''}>הוצאה</option><option value="income" ${c.kind==='income'?'selected':''}>הכנסה</option><option value="saving" ${c.kind==='saving'?'selected':''}>חיסכון</option></select></label><div class="category-icon-field full"><span>אייקון הקטגוריה</span><small>האייקון יופיע ליד התנועות ובמסכי הניהול</small><input name="icon" id="categoryIconValue" type="hidden" value="${selectedIcon}"><div class="category-icon-palette">${categoryIconCatalog.map(x=>`<button type="button" class="category-icon-option ${x.value===selectedIcon?'selected':''}" data-category-icon="${x.value}" aria-label="${x.name}" title="${x.name}"><span class="material-symbols-outlined">${x.value}</span><b>${x.name}</b></button>`).join('')}</div></div><div class="category-color-field full"><span>צבע הקטגוריה</span><small>פלטה מקצועית שנבחרה במיוחד לממשק</small><input name="color" id="categoryColorValue" type="hidden" value="${selectedColor}"><div class="category-color-palette">${categoryPalette.map(x=>`<button type="button" class="category-color-option ${x.value.toLowerCase()===selectedColor.toLowerCase()?'selected':''}" data-category-color="${x.value}" aria-label="${x.name}" title="${x.name}"><i style="--category-swatch:${x.value}"></i><b>${x.name}</b></button>`).join('')}</div></div><label id="budgetBehaviorWrap">אופי ההוצאה<select name="budgetBehavior"><option value="auto" ${!c.budgetBehavior||c.budgetBehavior==='auto'?'selected':''}>זיהוי חכם אוטומטי</option><option value="fixed" ${c.budgetBehavior==='fixed'?'selected':''}>קבועה / תקופתית</option><option value="variable" ${c.budgetBehavior==='variable'?'selected':''}>גמישה / יומיומית</option></select><small class="form-help">המלצות יומיות יוצגו רק להוצאות גמישות</small></label></div>${field.actions}${c.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{if(c.id)Object.assign(c,x);else db.categories.push({...x,id:uid()});save('הקטגוריה, האייקון והצבע נשמרו')});let kind=$('#categoryKind'),behavior=$('#budgetBehaviorWrap'),syncBehavior=()=>behavior.hidden=kind.value!=='expense';kind.onchange=syncBehavior;syncBehavior();$$('[data-category-icon]').forEach(button=>button.onclick=()=>{$('#categoryIconValue').value=button.dataset.categoryIcon;$$('[data-category-icon]').forEach(x=>x.classList.toggle('selected',x===button))});$$('[data-category-color]').forEach(button=>button.onclick=()=>{$('#categoryColorValue').value=button.dataset.categoryColor;$$('[data-category-color]').forEach(x=>x.classList.toggle('selected',x===button))});if(c.id)$('#deleteInside').onclick=()=>{if(db.transactions.some(t=>t.category===c.id))return alert('לא ניתן למחוק קטגוריה שיש בה תנועות. העבר אותן קודם לקטגוריה אחרת.');db.categories=db.categories.filter(x=>x.id!==c.id);$('#modal').hidden=true;save('הקטגוריה נמחקה')}
+}
+function editAccount(a={}){
+ modal(a.id?'עריכת חשבון':'חשבון חדש',`<div class="form-grid"><label>שם החשבון<input name="name" value="${esc(a.name||'')}" required></label><label>סוג<select name="type"><option value="asset" ${a.type==='asset'?'selected':''}>נכס</option><option value="liability" ${a.type==='liability'?'selected':''}>התחייבות</option></select></label><label>יתרה נוכחית<input name="balance" type="number" step="0.01" value="${a.balance??''}" required></label></div>${field.actions}${a.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{if(a.id)Object.assign(a,x,{balance:+x.balance});else db.accounts.push({...x,id:uid(),balance:+x.balance});save()});if(a.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק את החשבון?')){db.accounts=db.accounts.filter(x=>x.id!==a.id);$('#modal').hidden=true;save('החשבון נמחק')}}
+}
+function editRecurring(r={}){
+ modal(r.id?'עריכת תנועה קבועה':'תנועה קבועה חדשה',`<div class="form-grid"><label>שם<input name="name" value="${esc(r.name||'')}" required></label><label>סוג<select name="kind"><option value="expense" ${r.kind==='expense'?'selected':''}>הוצאה</option><option value="income" ${r.kind==='income'?'selected':''}>הכנסה</option></select></label><label>סכום<input name="amount" type="number" min="0" value="${r.amount||''}" required></label><label>יום בחודש<input name="day" type="number" min="1" max="31" value="${r.day||1}" required></label>${field.categories(r.kind||'expense',r.category)}<label class="check"><input name="active" type="checkbox" ${r.active!==false?'checked':''}> פעילה</label></div>${field.actions}${r.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,amount:+x.amount,day:+x.day,active:x.active==='on'};if(r.id)Object.assign(r,v);else db.recurring.push({...v,id:uid()});save()});if(r.id)$('#deleteInside').onclick=()=>{db.recurring=db.recurring.filter(x=>x.id!==r.id);$('#modal').hidden=true;save('התנועה הקבועה נמחקה')}
+}
+function editGoal(g={}){
+ modal(g.id?'עריכת מטרה':'מטרה חדשה',`<div class="form-grid"><label>שם המטרה<input name="name" value="${esc(g.name||'')}" required></label><label>סכום יעד<input name="target" type="number" min="1" value="${g.target||''}" required></label><label>כבר נצבר<input name="current" type="number" min="0" value="${g.current||0}"></label><label>הפקדה חודשית<input name="monthly" type="number" min="0" value="${g.monthly||0}"></label><label>תאריך יעד<input name="date" type="date" value="${g.date||''}"></label></div>${field.actions}${g.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,target:+x.target,current:+x.current,monthly:+x.monthly};if(g.id)Object.assign(g,v);else db.goals.push({...v,id:uid()});save()});if(g.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק את המטרה?')){db.goals=db.goals.filter(x=>x.id!==g.id);$('#modal').hidden=true;save('המטרה נמחקה')}}
+}
+function editDebt(d={}){
+ modal(d.id?'עריכת חוב':'חוב חדש',`<div class="form-grid"><label>שם החוב<input name="name" value="${esc(d.name||'')}" required></label><label>יתרה<input name="balance" type="number" min="0" value="${d.balance||''}" required></label><label>ריבית שנתית באחוזים<input name="interest" type="number" min="0" step="0.01" value="${d.interest||0}"></label><label>החזר חודשי<input name="payment" type="number" min="1" value="${d.payment||''}" required></label></div>${field.actions}${d.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,balance:+x.balance,interest:+x.interest,payment:+x.payment};if(d.id)Object.assign(d,v);else db.debts.push({...v,id:uid()});save()});if(d.id)$('#deleteInside').onclick=()=>{db.debts=db.debts.filter(x=>x.id!==d.id);$('#modal').hidden=true;save('החוב נמחק')}
+}
+// HON v5 screens: liquidity, wallets, category ordering and professional budget analysis.
+function walletTotal(){return db.wallets.reduce((s,w)=>s+w.balance,0)}
+function liquidTotal(){return db.accounts.filter(a=>a.type==='asset'&&a.liquid).reduce((s,a)=>s+a.balance,0)+walletTotal()}
+function bankBalance(){return db.accounts.filter(a=>a.type==='asset'&&a.subtype==='bank').reduce((s,a)=>s+a.balance,0)}
+function projectedBank(){
+ const f=forecast(monthKey()),t=totals(monthKey());
+ const futureIncome=Math.max(0,f.projectedIncome-t.income);
+ const futureExpense=Math.max(0,f.projectedExpense-t.expense);
+ const futureGoals=Math.max(0,f.goalCommit-t.saving);
+ return bankBalance()+futureIncome-futureExpense-futureGoals
+}
+function categoryBehavior(c){
+ if(c.budgetBehavior==='fixed'||c.budgetBehavior==='variable')return c.budgetBehavior;
+ const name=(c.name||'').toLowerCase().replace(/["״']/g,'');
+ return fixedExpenseWords.some(word=>name.includes(word))?'fixed':'variable'
+}
+function categoryBehaviorLabel(c){return categoryBehavior(c)==='fixed'?'קבועה / תקופתית':'גמישה / יומיומית'}
+function analysisClock(m=selectedMonth){
+ const d=new Date(m+'-15T12:00:00'),monthDays=new Date(d.getFullYear(),d.getMonth()+1,0).getDate(),now=new Date(),isCurrent=m===monthKey(now),isPast=m<monthKey(now);
+ return{monthDays,isCurrent,elapsedDays:isCurrent?Math.max(1,now.getDate()):isPast?monthDays:0,remainingDays:isCurrent?Math.max(0,monthDays-now.getDate()+1):0}
+}
+function categoryPerformance(m=selectedMonth){
+ const clock=analysisClock(m);
+ return db.categories.filter(c=>c.kind==='expense').map(c=>{
+  const actual=monthTx(m).filter(t=>t.kind==='expense'&&t.category===c.id).reduce((s,t)=>s+t.amount,0);
+  const planned=budgetFor(m,c.id),variance=actual-planned,pct=planned?actual/planned*100:actual?Infinity:0,pace=clock.elapsedDays?actual/clock.elapsedDays*clock.monthDays:0;
+  const history=[1,2,3].map(i=>{let d=new Date(m+'-15T12:00:00');d.setMonth(d.getMonth()-i);return monthTx(monthKey(d)).filter(t=>t.kind==='expense'&&t.category===c.id).reduce((s,t)=>s+t.amount,0)});
+  const avg3=history.reduce((s,x)=>s+x,0)/3;
+  return{...c,actual,planned,variance,pct,pace,avg3,behavior:categoryBehavior(c),...clock};
+ })
+}
+function professionalInsights(m=selectedMonth){
+ const data=categoryPerformance(m),over=data.filter(c=>c.planned>0&&c.actual>c.planned+.009).sort((a,b)=>b.variance-a.variance),unplanned=data.filter(c=>!c.planned&&c.actual>0).sort((a,b)=>b.actual-a.actual),pace=data.filter(c=>c.behavior==='variable'&&c.isCurrent&&c.elapsedDays>=5&&c.remainingDays>0&&c.planned>0&&c.actual>0&&c.actual<c.planned&&c.pace>c.planned*1.08).sort((a,b)=>b.pace/b.planned-a.pace/a.planned),out=[];
+ over.slice(0,3).forEach(c=>{
+  const fixed=c.behavior==='fixed';
+  out.push({level:'danger',title:`חריגה ב־${c.name}`,text:`נרשמו ${money(c.actual)} מול תקציב של ${money(c.planned)} - חריגה של ${money(c.variance)} (${numberAmount(c.pct-100)}%).`,action:fixed?`בדוק תחילה אם התשלום נרשם פעמיים. אם זה הסכום הקבוע החדש, עדכן את תקציב הברזל לחודש הבא ל־${money(c.actual)}.`:`החריגה כבר קרתה. כדי לאזן את החודש, קזז ${money(c.variance)} מקטגוריות גמישות אחרות שעוד נותרה בהן מסגרת.`})
+ });
+ unplanned.slice(0,2).forEach(c=>out.push({level:'warn',title:`הוצאה ללא יעד: ${c.name}`,text:`נרשמו ${money(c.actual)} בלי שהוגדר לקטגוריה תקציב.`,action:c.behavior==='fixed'?`אם זו הוצאה שחוזרת, הוסף אותה לתקציב הברזל בסכום של כ־${money(Math.max(c.actual,c.avg3))}. בדוק גם שלא מדובר ברישום כפול.`:`קבע מסגרת ראשונית של כ־${money(Math.max(c.actual,c.avg3))}, ואז דייק אותה בחודש הבא לפי הצורך.`}));
+ pace.slice(0,2).forEach(c=>{const remaining=c.planned-c.actual,daily=remaining/c.remainingDays;out.push({level:'warn',title:`כדאי להאט ב־${c.name}`,text:`נוצלו ${numberAmount(c.pct)}% מהתקציב. בקצב הנוכחי ההוצאה צפויה להגיע לכ־${money(c.pace)}.`,action:`נותרו ${money(remaining)} ל־${c.remainingDays} ימים - מסגרת מומלצת של עד ${money(daily)} ליום.`})});
+ const paid=data.find(c=>c.behavior==='fixed'&&c.planned>0&&Math.abs(c.actual-c.planned)<.01),paidInsight=paid?{level:'good',title:`${paid.name} שולם בהתאם לתקציב`,text:`נרשמו ${money(paid.actual)}, בדיוק לפי הסכום שתוכנן.`,action:'אין צורך בפעולה. הוצאה קבועה ששולמה במלואה אינה מחולקת על פני יתרת ימי החודש.'}:null;
+ if(out.length&&paidInsight)out.push(paidInsight);
+ if(!out.length){let best=data.filter(c=>c.behavior==='variable'&&c.planned>0&&c.actual>0).sort((a,b)=>(a.actual/a.planned)-(b.actual/b.planned))[0];out.push(paidInsight||{level:'good',title:'התקציב בשליטה',text:'לא נמצאו כרגע חריגות מהתקציב שהוגדר.',action:best?`${best.name} במצב הטוב ביותר: נוצלו ${numberAmount(best.pct)}% מהתקציב.`:'המשך לעדכן תנועות כדי שהניתוח יישאר מדויק.'})}
+ return out
+}
+
+function dashboard(){
+ heading(`שלום ${db.settings.name||''}, זו התמונה שלך`,`יום ${new Date().toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long'})}`);
+ let t=totals(monthKey()),f=forecast(monthKey()),net=sumAccounts('asset')+walletTotal()-sumAccounts('liability'),daily=Math.max(0,f.free/daysLeft()),h=historyMonths(),mx=Math.max(1,...h.flatMap(x=>[x.income,x.expense])),health=healthScore(),recent=[...db.transactions].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4);
+ $('#view').innerHTML=`
+ <div class="grid stats five-stats">
+  <div class="card hero-card stat"><small>ההון הנקי</small><strong>${money(net)}</strong><span class="trend">נכסים וארנקים פחות התחייבויות</span></div>
+  <div class="card stat"><small>בבנק עכשיו</small><strong>${money(bankBalance())}</strong><span class="trend">לפי חשבונות שסומנו כחשבון בנק</span></div>
+  <div class="card stat"><small>צפי בבנק לסוף החודש</small><strong class="${projectedBank()>=0?'up':'down'}">${money(projectedBank())}</strong><span class="trend">לפי התקציב, הקבועות והמטרות</span></div>
+  <div class="card stat"><small>כסף נזיל</small><strong class="up">${money(liquidTotal())}</strong><span class="trend">בנק, מזומן וארנקים דיגיטליים</span></div>
+  <div class="card stat"><small>בטוח להוצאה יומית</small><strong>${money(daily)}</strong><span class="trend">${daysLeft()} ימים נותרו החודש</span></div>
+ </div>
+ <div class="grid two section-space">
+  <div class="card"><div class="card-head"><div><h3>תזרים חצי־שנתי</h3><small class="muted">הכנסות מול הוצאות</small></div><span class="legend"><i class="dot green"></i>הכנסה <i class="dot soft"></i>הוצאה</span></div><div class="mini-chart">${h.map(x=>`<div><i style="height:${x.expense/mx*100}%"></i><i style="height:${x.income/mx*100}%"></i></div>`).join('')}</div><div class="chart-labels">${h.map(x=>`<span>${x.label}</span>`).join('')}</div></div>
+  <div class="card"><div class="card-head"><div><h3>בריאות פיננסית</h3><small class="muted">מדד לפי תזרים, חוב, תקציב ומטרות</small></div></div><div class="health"><div class="ring" style="--p:${health.score}" data-value="${health.score}"></div><div><h4>${health.score>=80?'מצב מצוין':health.score>=60?'בדרך הנכונה':health.score>=40?'צריך לחזק':'דורש פעולה'}</h4><p class="muted">${health.notes[0]||'המשיכו כך'}</p></div></div><button class="ghost full-btn" data-page="review">לבדיקת החודש המלאה</button></div>
+ </div>
+ <div class="grid two section-space"><div class="card"><div class="card-head"><div><h3>פעילות אחרונה</h3><small class="muted">${db.transactions.length} תנועות בסך הכול</small></div><button class="ghost" data-action="addTx">＋ תנועה</button></div>${recent.length?recent.map(txRow).join(''):empty('＋','מתחילים מכאן','הוסף הכנסה או הוצאה ראשונה')}</div><div class="card"><div class="card-head"><div><h3>הפעולה הבאה שלך</h3><small class="muted">המלצה לפי הנתונים</small></div></div>${professionalInsights().slice(0,2).map(x=>`<div class="insight ${x.level}"><b>${x.title}</b><br>${x.action}</div>`).join('')}<button class="primary full-btn" data-page="reports">לניתוח המלא</button></div></div>`
+}
+
+function cashflow(){
+ heading('תזרים חזוי','לדעת היום מה צפוי לקרות עד סוף החודש');let f=forecast(),recs=recurringInMonth(selectedMonth);
+ let events=[...monthTx().map(x=>({date:x.date,name:x.note||cat(x.category).name,amount:x.amount,kind:x.kind})),...recs.filter(r=>r.isFuture).map(r=>({date:selectedMonth+'-'+String(r.day).padStart(2,'0'),name:r.name,amount:r.amount,kind:r.kind}))].sort((a,b)=>a.date.localeCompare(b.date));
+ $('#view').innerHTML=`${monthPicker()}<div class="grid stats section-space"><div class="card stat"><small>הכנסה צפויה</small><strong class="up">${money(f.projectedIncome)}</strong></div><div class="card stat"><small>הוצאה צפויה</small><strong class="down">${money(f.projectedExpense)}</strong></div><div class="card stat"><small>למטרות וחיסכון</small><strong>${money(f.goalCommit)}</strong></div><div class="card hero-card stat"><small>צפי לסוף החודש</small><strong>${money(f.free)}</strong></div></div><div class="grid two section-space"><div class="card"><div class="card-head"><h3>ציר הזמן של החודש</h3><button class="ghost" data-action="addRecurring">＋ קבועה</button></div><div class="timeline-list">${events.length?events.map(e=>`<div class="timeline-row"><time><b>${new Date(e.date+'T12:00').toLocaleDateString('he-IL',{day:'2-digit'})}</b><small>${new Date(e.date+'T12:00').toLocaleDateString('he-IL',{month:'short'})}</small></time><div class="grow"><b>${esc(e.name)}</b></div><strong class="${e.kind==='income'?'up':'down'}">${e.kind==='income'?'+':'−'}${money(e.amount)}</strong></div>`).join(''):empty('⌁','אין עדיין תנועות','הוסף תנועות קבועות כדי לקבל תחזית')}</div></div><div class="card"><h3>פירוש התחזית</h3><div class="forecast-formula"><span>${money(f.projectedIncome)}<small>הכנסות</small></span><b>−</b><span>${money(f.projectedExpense)}<small>הוצאות</small></span><b>−</b><span>${money(f.goalCommit)}<small>מטרות</small></span><b>=</b><span class="${f.free>=0?'up':'down'}">${money(f.free)}<small>צפי</small></span></div>${insights().map(x=>`<div class="insight">${x}</div>`).join('')}</div></div>`
+}
+
+function budget(){
+ heading('התקציב החכם','כל שקל מקבל תפקיד לפני שהוא יוצא');let cats=db.categories.filter(c=>c.kind==='expense'),plan=planFor(selectedMonth),allocated=cats.reduce((s,c)=>s+budgetFor(selectedMonth,c.id),0)+db.goals.reduce((s,g)=>s+(g.monthly||0),0),left=plan.income-allocated;
+ $('#view').innerHTML=`${monthPicker()}<div class="grid three section-space"><div class="card stat"><small>הכנסה מתוכננת</small><strong>${money(plan.income)}</strong></div><div class="card stat"><small>הוקצה להוצאות ולמטרות</small><strong>${money(allocated)}</strong></div><div class="card ${left<0?'warning-card':'hero-card'} stat"><small>נותר להקצאה</small><strong>${money(left)}</strong></div></div><div class="card section-space"><div class="card-head"><div><h3>קטגוריות התקציב</h3><small class="muted">מתוכנן מול מה שיצא בפועל</small></div><div><button class="ghost" data-action="copyBudget">העתקה מחודש קודם</button> <button class="primary" data-action="setBudget">עריכת תקציב</button></div></div><div class="budget-grid">${cats.map((c,index)=>{let planned=budgetFor(selectedMonth,c.id),actual=monthTx().filter(t=>t.kind==='expense'&&t.category===c.id).reduce((s,t)=>s+t.amount,0),p=planned?Math.min(100,actual/planned*100):0;return `<article class="budget-card" draggable="true" data-cat-id="${c.id}"><div class="budget-card-head"><span><i class="dot" style="background:${c.color}"></i><b>${esc(c.name)}</b></span><span class="drag-handle" title="גרירת קטגוריה">⋮⋮</span></div><div class="budget-values"><strong>${money(actual)}</strong><span>מתוך ${money(planned)}</span><b class="${actual>planned&&planned?'down':''}">${planned?(actual/planned*100).toFixed(1):'0.0'}%</b></div><div class="progress"><i style="width:${p}%;background:${actual>planned&&planned?'var(--red)':c.color}"></i></div><small>נשאר ${money(Math.max(0,planned-actual))}</small><div class="mobile-order"><button data-action="moveCatUp" data-id="${c.id}" ${index===0?'disabled':''}>↑</button><button data-action="moveCatDown" data-id="${c.id}" ${index===cats.length-1?'disabled':''}>↓</button></div></article>`}).join('')}</div></div>`;bindCategoryDrag()
+}
+
+function wealth(){
+ heading('הון עצמי','לראות מה נזיל, מה ארוך־טווח ואיך המשפחה מתקדמת');let assets=db.accounts.filter(a=>a.type==='asset'),liabs=db.accounts.filter(a=>a.type==='liability'),net=sumAccounts('asset')+walletTotal()-sumAccounts('liability'),history=[...db.snapshots].sort((a,b)=>a.month.localeCompare(b.month));
+ $('#view').innerHTML=`<div class="grid stats"><div class="card stat"><small>נכסים וארנקים</small><strong class="up">${money(sumAccounts('asset')+walletTotal())}</strong></div><div class="card stat"><small>כסף נזיל</small><strong class="up">${money(liquidTotal())}</strong></div><div class="card stat"><small>התחייבויות</small><strong class="down">${money(sumAccounts('liability'))}</strong></div><div class="card hero-card stat"><small>הון נקי</small><strong>${money(net)}</strong></div></div><div class="grid two section-space"><div class="card"><div class="card-head"><h3>חשבונות ונכסים</h3><button class="primary" data-action="addAccount">＋ חשבון</button></div><div class="account-table"><div class="account-head"><span>שם החשבון</span><span>נזילות</span><span>יתרה</span><span></span></div>${assets.map(accountRow).join('')||empty('◇','אין נכסים','הוסף עו״ש, חיסכון, השקעות או רכוש')}</div><h3 class="subhead">התחייבויות</h3><div class="account-table">${liabs.map(accountRow).join('')||'<p class="muted">אין התחייבויות רשומות</p>'}</div></div><div class="card"><div class="card-head"><div><h3>התקדמות ההון</h3><small class="muted">צילום מצב חודשי</small></div><button class="ghost" data-action="snapshot">שמירת החודש</button></div>${history.length?history.slice(-12).map((s,i)=>`<div class="row"><span>${monthName(s.month)}</span><b class="${i&&s.net>=history[i-1]?.net?'up':''}">${money(s.net)}</b></div>`).join(''):empty('▥','אין עדיין היסטוריה','שמור צילום מצב בסוף כל חודש')}</div></div>`
+}
+function accountRow(a){return `<div class="account-row"><div><b>${esc(a.name)}</b></div><span class="liquidity ${a.liquid?'liquid':'locked'}">${a.type==='liability'?'התחייבות':a.liquid?'נזיל':'לא נזיל'}</span><strong>${money(a.balance)}</strong><button class="mini-btn" data-action="editAccount" data-id="${a.id}">עריכה</button></div>`}
+
+function wallets(){
+ heading('ארנקים דיגיטליים','Bit, פייבוקס וכל יתרה זמינה מחוץ לבנק');
+ $('#view').innerHTML=`<div class="grid three"><div class="card hero-card stat"><small>סה״כ בארנקים</small><strong>${money(walletTotal())}</strong><span class="trend">נכלל בכסף הנזיל ובהון העצמי</span></div><div class="card stat"><small>מספר ארנקים</small><strong>${db.wallets.length}</strong></div><div class="card stat"><small>כל הכסף הנזיל</small><strong class="up">${money(liquidTotal())}</strong></div></div><div class="card section-space"><div class="card-head"><div><h3>הארנקים שלי</h3><small class="muted">אפשר להוסיף Bit, פייבוקס או כל ארנק אחר</small></div><button class="primary" data-action="addWallet">＋ ארנק</button></div><div class="wallet-grid">${db.wallets.length?db.wallets.map(w=>`<article class="wallet-card"><div class="wallet-logo">${esc(w.name.slice(0,1).toUpperCase())}</div><div class="grow"><small>יתרה ב־${esc(w.name)}</small><strong>${money(w.balance)}</strong></div><button class="mini-btn" data-action="editWallet" data-id="${w.id}">עריכה</button></article>`).join(''):empty('◈','עוד אין ארנקים','הוסף את יתרת Bit או פייבוקס')}</div></div>`
+}
+
+function reports(){
+ heading('דוחות ותובנות','לא רק מה קרה - אלא מה כדאי לעשות עכשיו');let h=historyMonths(12),t=totals(),cats=db.categories.filter(c=>c.kind==='expense').map(c=>({...c,total:monthTx().filter(x=>x.kind==='expense'&&x.category===c.id).reduce((s,x)=>s+x.amount,0)})).filter(c=>c.total).sort((a,b)=>b.total-a.total),max=Math.max(1,...cats.map(c=>c.total)),avg=h.reduce((s,x)=>s+x.expense,0)/h.length,analysis=professionalInsights();
+ $('#view').innerHTML=`${monthPicker()}<div class="grid three section-space"><div class="card stat"><small>ממוצע הוצאות</small><strong>${money(avg)}</strong><span class="trend">12 חודשים</span></div><div class="card stat"><small>שיעור חיסכון</small><strong class="${t.income-t.expense>=0?'up':'down'}">${t.income?((t.income-t.expense)/t.income*100).toFixed(1):'0.0'}%</strong></div><div class="card stat"><small>הוצאה יומית ממוצעת</small><strong>${money(t.expense/Math.max(1,new Date().getDate()))}</strong></div></div><div class="reports-layout section-space"><div class="card"><div class="card-head"><h3>פילוח הוצאות</h3></div>${cats.length?cats.map(c=>`<div class="barline"><span><i class="dot" style="background:${c.color}"></i>${esc(c.name)}</span><div class="bar"><i style="width:${c.total/max*100}%;background:${c.color}"></i></div><b>${money(c.total)}</b></div>`).join(''):empty('▥','אין מספיק מידע','הוסף הוצאות כדי לראות פילוח')}</div><aside class="card insights-panel"><div class="card-head"><div><h3>HON Insights</h3><small class="muted">ניתוח מקצועי מול התקציב</small></div><span class="badge">אוטומטי</span></div>${analysis.map(x=>`<div class="analysis-card ${x.level}"><h4>${x.title}</h4><p>${x.text}</p><div><b>איך לשפר:</b> ${x.action}</div></div>`).join('')}</aside></div>`
+}
+
+function settings(){
+ heading('הגדרות, קטגוריות וגיבוי','שליטה מלאה במידע המשפחתי');$('#view').innerHTML=`<div class="grid two"><div class="card"><h3>המשפחה</h3><br><label>השם שיופיע באפליקציה<input id="userName" value="${esc(db.settings.name)}"></label><br><button class="primary" data-action="saveName">שמירה</button></div><div class="card"><h3>גיבוי והעברה</h3><p class="muted">הורד גיבוי מלא ושמור אותו במקום פרטי ובטוח. אפשר לשחזר אותו בכל גרסה חדשה.</p><button class="primary" data-action="export">הורדת גיבוי מלא</button> <label class="ghost upload">שחזור מגיבוי<input id="importFile" type="file" accept=".json" hidden></label></div><div class="card full-width-card"><div class="card-head"><div><h3>קטגוריות וסדר הצגה</h3><small class="muted">גרור קטגוריה למיקום הרצוי; הסדר נשמר בכל המסכים</small></div><button class="ghost" data-action="addCat">＋ חדשה</button></div><div id="categorySorter" class="category-sorter">${db.categories.map((c,index)=>`<div class="category-sort-row" draggable="true" data-cat-id="${c.id}"><span class="drag-handle">⋮⋮</span><span class="grow"><i class="dot" style="background:${c.color}"></i><b>${esc(c.name)}</b></span><small>${typeName(c.kind)}</small><div class="sort-buttons"><button data-action="moveCatUp" data-id="${c.id}" ${index===0?'disabled':''}>↑</button><button data-action="moveCatDown" data-id="${c.id}" ${index===db.categories.length-1?'disabled':''}>↓</button></div><button class="mini-btn" data-action="editCat" data-id="${c.id}">עריכה</button></div>`).join('')}</div></div><div class="card"><h3>פרטיות ותחזוקה</h3><p>המידע נשמר מקומית ומסתנכרן לענן כאשר החשבון מחובר.</p><div class="insight">גרסת נתונים: ${db.version} · ${db.transactions.length} תנועות · ${db.accounts.length} חשבונות · ${db.wallets.length} ארנקים</div><button class="danger" data-action="reset">מחיקת כל הנתונים</button></div></div>`;$('#importFile').onchange=importData;bindCategoryDrag()
+}
+
+function bindCategoryDrag(){
+ let dragged=null;
+ $$('[draggable][data-cat-id]').forEach(el=>{el.ondragstart=()=>{dragged=el.dataset.catId;el.classList.add('dragging')};el.ondragend=()=>{el.classList.remove('dragging');dragged=null};el.ondragover=e=>e.preventDefault();el.ondrop=e=>{e.preventDefault();let target=el.dataset.catId;if(!dragged||dragged===target)return;let from=db.categories.findIndex(c=>c.id===dragged),to=db.categories.findIndex(c=>c.id===target),[item]=db.categories.splice(from,1);db.categories.splice(to,0,item);save('סדר הקטגוריות נשמר')}})
+}
+function moveCategory(id,direction){let i=db.categories.findIndex(c=>c.id===id),j=i+direction;if(i<0||j<0||j>=db.categories.length)return;[db.categories[i],db.categories[j]]=[db.categories[j],db.categories[i]];save('סדר הקטגוריות נשמר')}
+actions.moveCatUp=id=>moveCategory(id,-1);
+actions.moveCatDown=id=>moveCategory(id,1);
+actions.addWallet=()=>editWallet();
+actions.editWallet=id=>editWallet(db.wallets.find(w=>w.id===id));
+actions.snapshot=(id,notify=true)=>{let assets=sumAccounts('asset')+walletTotal(),net=assets-sumAccounts('liability'),existing=db.snapshots.find(s=>s.month===selectedMonth);if(existing)Object.assign(existing,{assets,liabilities:sumAccounts('liability'),net});else db.snapshots.push({month:selectedMonth,assets,liabilities:sumAccounts('liability'),net});persist();if(notify)save('צילום ההון נשמר')};
+function editWallet(w={}){
+ modal(w.id?'עריכת ארנק':'ארנק דיגיטלי חדש',`<div class="form-grid"><label>שם הארנק<input name="name" value="${esc(w.name||'')}" placeholder="Bit / פייבוקס" required></label><label>יתרה נוכחית<input name="balance" type="number" step="0.01" value="${w.balance??''}" required></label></div>${field.actions}${w.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,balance:+x.balance};if(w.id)Object.assign(w,v);else db.wallets.push({...v,id:uid()});save('הארנק נשמר')});if(w.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק את הארנק?')){db.wallets=db.wallets.filter(x=>x.id!==w.id);$('#modal').hidden=true;save('הארנק נמחק')}}
+}
+function editAccount(a={}){
+ modal(a.id?'עריכת חשבון':'חשבון חדש',`<div class="form-grid"><label>שם החשבון<input name="name" value="${esc(a.name||'')}" required></label><label>סוג<select name="type" id="accountType"><option value="asset" ${a.type==='asset'?'selected':''}>נכס</option><option value="liability" ${a.type==='liability'?'selected':''}>התחייבות</option></select></label><label>סוג החשבון<select name="subtype"><option value="bank" ${a.subtype==='bank'?'selected':''}>חשבון בנק</option><option value="cash" ${a.subtype==='cash'?'selected':''}>מזומן</option><option value="pension" ${a.subtype==='pension'?'selected':''}>פנסיה / גמל</option><option value="investment" ${a.subtype==='investment'?'selected':''}>השקעה</option><option value="property" ${a.subtype==='property'?'selected':''}>רכב / נדל״ן</option><option value="other" ${a.subtype==='other'?'selected':''}>אחר</option></select></label><label>יתרה נוכחית<input name="balance" type="number" step="0.01" value="${a.balance??''}" required></label><label class="check full"><input name="liquid" type="checkbox" ${a.liquid?'checked':''}> הנכס נזיל וזמין לשימוש</label></div>${field.actions}${a.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,balance:+x.balance,liquid:x.liquid==='on'};if(v.type==='liability')v.liquid=false;if(a.id)Object.assign(a,v);else db.accounts.push({...v,id:uid()});save('החשבון נשמר')});if(a.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק את החשבון?')){db.accounts=db.accounts.filter(x=>x.id!==a.id);$('#modal').hidden=true;save('החשבון נמחק')}}
+}
+
+// HON v6 screens and calculations.
+function effectiveBalance(a){
+ let value=+a.balance||0,cutoff=a.balanceAsOf||'';
+ db.transactions.filter(t=>t.createdAt&&t.createdAt>cutoff).forEach(t=>{
+  if(t.kind==='transfer'){if(t.account===a.id)value-=t.amount;if(t.toAccount===a.id)value+=t.amount}
+  else if(t.account===a.id)value+=t.kind==='income'?t.amount:-t.amount;
+ });
+ return value
+}
+function subtypeBalance(type){return db.accounts.filter(a=>a.type==='asset'&&a.subtype===type).reduce((s,a)=>s+effectiveBalance(a),0)}
+function subtypeMonthMovement(type,m=monthKey()){
+ let accounts=db.accounts.filter(a=>a.type==='asset'&&a.subtype===type),ids=new Set(accounts.map(a=>a.id)),cutoffs=new Map(accounts.map(a=>[a.id,a.balanceAsOf||'']));
+ return roundBudgetAmount(monthTx(m).reduce((sum,t)=>{
+  let amount=+t.amount||0;
+  if(t.kind==='transfer'){
+   if(ids.has(t.account)&&t.createdAt&&t.createdAt>cutoffs.get(t.account))sum-=amount;
+   if(ids.has(t.toAccount)&&t.createdAt&&t.createdAt>cutoffs.get(t.toAccount))sum+=amount;
+   return sum
   }
- };
- window.HONCloud=API;
- window.addEventListener('online',()=>API.syncNow());
- window.addEventListener('focus',()=>API.syncNow());
- window.addEventListener('pageshow',()=>API.syncNow());
- document.addEventListener('visibilitychange',()=>{if(!document.hidden)API.syncNow()});
-})();
+  if(ids.has(t.account)&&t.createdAt&&t.createdAt>cutoffs.get(t.account))sum+=t.kind==='income'?amount:-amount;
+  return sum
+ },0))
+}
+function inferredMonthlyOpeningBalance(type,m=monthKey()){
+ return roundBudgetAmount(subtypeBalance(type)-subtypeMonthMovement(type,m))
+}
+function ensureMonthlyOpeningBalances(m=monthKey()){
+ let changed=false;
+ ['bank','cash'].forEach(type=>{
+  if(db.monthlyOpeningBalances.some(x=>x.month===m&&x.type===type))return;
+  db.monthlyOpeningBalances.push({id:uid(),month:m,type,amount:inferredMonthlyOpeningBalance(type,m),source:'auto',createdAt:new Date().toISOString()});changed=true
+ });
+ if(changed)persist();
+ return changed
+}
+function monthlyOpeningBalance(type,m=monthKey()){
+ ensureMonthlyOpeningBalances(m);
+ return roundBudgetAmount(db.monthlyOpeningBalances.find(x=>x.month===m&&x.type===type)?.amount||0)
+}
+function setMonthlyOpeningBalance(type,m,amount){
+ let row=db.monthlyOpeningBalances.find(x=>x.month===m&&x.type===type),value=roundBudgetAmount(amount);
+ if(row)Object.assign(row,{amount:value,source:'manual',updatedAt:new Date().toISOString()});
+ else db.monthlyOpeningBalances.push({id:uid(),month:m,type,amount:value,source:'manual',createdAt:new Date().toISOString()});
+ return value
+}
+function monthlyBalanceChange(type,m=monthKey()){
+ return roundBudgetAmount(subtypeBalance(type)-monthlyOpeningBalance(type,m))
+}
+function shiftMonth(m,amount){let date=new Date(m+'-15T12:00:00');date.setMonth(date.getMonth()+amount);return monthKey(date)}
+function subtypeMovementAfterMonth(type,m){
+ let accounts=db.accounts.filter(a=>a.type==='asset'&&a.subtype===type),ids=new Set(accounts.map(a=>a.id)),cutoffs=new Map(accounts.map(a=>[a.id,a.balanceAsOf||'']));
+ return roundBudgetAmount(db.transactions.filter(t=>(t.date||'').slice(0,7)>m).reduce((sum,t)=>{
+  let amount=+t.amount||0;
+  if(t.kind==='transfer'){
+   if(ids.has(t.account)&&t.createdAt&&t.createdAt>cutoffs.get(t.account))sum-=amount;
+   if(ids.has(t.toAccount)&&t.createdAt&&t.createdAt>cutoffs.get(t.toAccount))sum+=amount;
+  }else if(ids.has(t.account)&&t.createdAt&&t.createdAt>cutoffs.get(t.account))sum+=t.kind==='income'?amount:-amount;
+  return sum
+ },0))
+}
+function historicalSubtypeBalances(type,m){
+ let movement=subtypeMonthMovement(type,m),snapshot=db.snapshots.find(x=>x.month===m),storedOpening=db.monthlyOpeningBalances.find(x=>x.month===m&&x.type===type),nextOpening=db.monthlyOpeningBalances.find(x=>x.month===shiftMonth(m,1)&&x.type===type),snapshotEnd=type==='bank'?snapshot?.bank:snapshot?.cash,snapshotStart=type==='bank'?snapshot?.openingBank:snapshot?.openingCash,end,start;
+ if(m===monthKey())end=subtypeBalance(type);
+ else if(Number.isFinite(+snapshotEnd))end=+snapshotEnd;
+ else if(nextOpening)end=+nextOpening.amount||0;
+ else if(storedOpening)end=(+storedOpening.amount||0)+movement;
+ else end=subtypeBalance(type)-subtypeMovementAfterMonth(type,m);
+ if(Number.isFinite(+snapshotStart))start=+snapshotStart;
+ else if(storedOpening)start=+storedOpening.amount||0;
+ else start=end-movement;
+ return{start:roundBudgetAmount(start),end:roundBudgetAmount(end),change:roundBudgetAmount(end-start)}
+}
+function monthlyCategoryStats(m){
+ let ids=new Set([...db.budgets.filter(x=>x.month===m).map(x=>x.category),...monthTx(m).filter(x=>x.kind==='expense').map(x=>x.category)].filter(Boolean));
+ return [...ids].map(id=>{let category=cat(id),spent=roundBudgetAmount(monthTx(m).filter(x=>x.kind==='expense'&&x.category===id).reduce((sum,x)=>sum+(+x.amount||0),0)),target=roundBudgetAmount(budgetFor(m,id));return{id,name:category.name,color:category.color||'#60758a',spent,target,difference:roundBudgetAmount(target-spent)}}).filter(x=>x.spent||x.target).sort((a,b)=>b.spent-a.spent)
+}
+function availableHistoryMonths(){
+ let values=[monthKey(),...db.transactions.map(x=>(x.date||'').slice(0,7)),...db.budgets.map(x=>x.month),...db.monthlyOpeningBalances.map(x=>x.month),...db.snapshots.map(x=>x.month),...db.reviews.map(x=>x.month)].filter(x=>/^\d{4}-\d{2}$/.test(x)),first=values.sort()[0]||monthKey(),months=[],cursor=first;
+ while(cursor<=monthKey()&&months.length<120){months.push(cursor);cursor=shiftMonth(cursor,1)}
+ return months
+}
+function monthlyHistoryData(m){
+ let totalsForMonth=totals(m),out=roundBudgetAmount(totalsForMonth.expense+totalsForMonth.saving+totalsForMonth.debt),result=roundBudgetAmount(totalsForMonth.income-out),bank=historicalSubtypeBalances('bank',m),cash=historicalSubtypeBalances('cash',m),categories=monthlyCategoryStats(m),snapshot=db.snapshots.find(x=>x.month===m),review=db.reviews.find(x=>x.month===m),opening=roundBudgetAmount(bank.start+cash.start),closing=roundBudgetAmount(bank.end+cash.end);
+ return{month:m,totals:totalsForMonth,out,result,bank,cash,opening,closing,liquidChange:roundBudgetAmount(closing-opening),categories,snapshot,review,transactionCount:monthTx(m).length,savingsRate:totalsForMonth.income?roundBudgetAmount(totalsForMonth.saving/totalsForMonth.income*100):0,topCategory:categories[0]||null}
+}
+function liveAssets(){return db.accounts.filter(a=>a.type==='asset').reduce((s,a)=>s+effectiveBalance(a),0)}
+function liveLiabilities(){return db.accounts.filter(a=>a.type==='liability').reduce((s,a)=>s+a.balance,0)}
+function correctSubtype(type,label){
+ let list=db.accounts.filter(a=>a.type==='asset'&&a.subtype===type);
+ if(!list.length)return alert(`תחילה הוסף בהון העצמי חשבון מסוג ${label}.`);
+ modal(`תיקון יתרת ${label}`,`<div class="form-grid"><label>חשבון<select name="account">${list.map(a=>`<option value="${a.id}">${esc(a.name)} - ${money(effectiveBalance(a))}</option>`).join('')}</select></label><label>היתרה הנכונה עכשיו<input name="balance" type="number" step="0.01" value="${effectiveBalance(list[0])}" required></label></div><p class="muted">התיקון ייצור נקודת התחלה חדשה. כל תנועה שתוסיף לאחר מכן תמשיך לעדכן את היתרה אוטומטית.</p>${field.actions}`,x=>{let a=db.accounts.find(a=>a.id===x.account);a.balance=+x.balance;a.balanceAsOf=new Date().toISOString();save(`יתרת ${label} תוקנה`)})
+}
+actions.correctBank=()=>correctSubtype('bank','עו״ש');
+actions.correctCash=()=>correctSubtype('cash','מזומן');
+actions.correctOpeningBalances=()=>{
+ let m=monthKey();ensureMonthlyOpeningBalances(m);
+ modal(`יתרות פתיחה - ${monthName(m)}`,`<div class="opening-balance-note"><b>נקודת ההשוואה של החודש</b><p>רשום כמה היו בעו״ש ובמזומן בתחילת החודש. התיקון משפיע רק על ההשוואה החודשית ולא משנה את היתרה הנוכחית.</p></div><div class="form-grid"><label>עו״ש בתחילת החודש<input name="bank" type="number" step="0.01" value="${monthlyOpeningBalance('bank',m)}" required></label><label>מזומן בתחילת החודש<input name="cash" type="number" step="0.01" value="${monthlyOpeningBalance('cash',m)}" required></label></div>${field.actions}`,x=>{setMonthlyOpeningBalance('bank',m,x.bank);setMonthlyOpeningBalance('cash',m,x.cash);save('יתרות תחילת החודש עודכנו')});
+ $$('[data-close-modal]').forEach(b=>b.onclick=()=>$('#modal').hidden=true)
+};
+
+function dashboard(){
+ heading(`שלום ${db.settings.name||''}, זו התמונה שלך`,`יום ${new Date().toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long'})}`);
+ let net=liveAssets()-liveLiabilities(),h=historyMonths(),mx=Math.max(1,...h.flatMap(x=>[x.income,x.expense])),health=healthScore(),recent=[...db.transactions].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,4);
+ $('#view').innerHTML=`
+ <div class="grid three overview-core">
+  <div class="card hero-card stat"><small>ההון הנקי</small><strong>${money(net)}</strong><span class="trend">ללא Bit, פייבוקס וארנקים דיגיטליים</span></div>
+  <div class="card stat editable-stat"><small>בעו״ש עכשיו</small><strong>${money(subtypeBalance('bank'))}</strong><span class="trend">מתעדכן מתנועות ששויכו לעו״ש</span><button class="mini-btn" data-action="correctBank">תיקון יתרה</button></div>
+  <div class="card stat editable-stat"><small>מזומן עכשיו</small><strong>${money(subtypeBalance('cash'))}</strong><span class="trend">מתעדכן מתנועות ששויכו למזומן</span><button class="mini-btn" data-action="correctCash">תיקון יתרה</button></div>
+ </div>
+ <div class="grid two section-space"><div class="card"><div class="card-head"><div><h3>תזרים חצי־שנתי</h3><small class="muted">הכנסות מול הוצאות</small></div><span class="legend"><i class="dot green"></i>הכנסה <i class="dot soft"></i>הוצאה</span></div><div class="mini-chart">${h.map(x=>`<div><i style="height:${x.expense/mx*100}%"></i><i style="height:${x.income/mx*100}%"></i></div>`).join('')}</div><div class="chart-labels">${h.map(x=>`<span>${x.label}</span>`).join('')}</div></div><div class="card"><div class="card-head"><div><h3>בריאות פיננסית</h3><small class="muted">מדד לפי תזרים, חוב, תקציב ומטרות</small></div></div><div class="health"><div class="ring" style="--p:${health.score}" data-value="${health.score}"></div><div><h4>${health.score>=80?'מצב מצוין':health.score>=60?'בדרך הנכונה':health.score>=40?'צריך לחזק':'דורש פעולה'}</h4><p class="muted">${health.notes[0]||'המשיכו כך'}</p></div></div><button class="ghost full-btn" data-page="review">לבדיקת החודש המלאה</button></div></div>
+ <div class="grid two section-space"><div class="card"><div class="card-head"><div><h3>פעילות אחרונה</h3><small class="muted">${db.transactions.length} תנועות בסך הכול</small></div><button class="ghost" data-action="addTx">＋ תנועה</button></div>${recent.length?recent.map(txRow).join(''):empty('＋','מתחילים מכאן','הוסף הכנסה או הוצאה ראשונה')}</div><div class="card"><div class="card-head"><div><h3>הפעולה הבאה שלך</h3><small class="muted">המלצה לפי הנתונים</small></div></div>${professionalInsights().slice(0,2).map(x=>`<div class="insight ${x.level}"><b>${x.title}</b><br>${x.action}</div>`).join('')}<button class="primary full-btn" data-page="reports">לניתוח המלא</button></div></div>`
+}
+function txRow(t){let c=cat(t.category);return `<div class="row tx-row"><div class="tx-icon" style="background:${c.color}18;color:${c.color}">${t.kind==='income'?'↓':t.kind==='transfer'?'↔':'↑'}</div><div class="grow"><b>${esc(t.note||c.name)}</b><small class="muted">${esc(c.name)} · ${new Date(t.date+'T12:00:00').toLocaleDateString('he-IL')}</small></div><strong class="${t.kind==='income'?'up':t.kind==='transfer'?'':'down'}" dir="ltr">${t.kind==='transfer'?money(t.amount):movementMoney(t.amount,t.kind)}</strong><button class="mini-btn" data-action="editTx" data-id="${t.id}">⋮</button></div>`}
+
+function cashflow(){
+ heading('תזרים חזוי','לדעת היום מה צפוי לקרות עד סוף החודש');let f=forecast(),recs=recurringInMonth(selectedMonth);
+ let events=[...monthTx().map(x=>({date:x.date,name:x.note||cat(x.category).name,amount:x.amount,kind:x.kind})),...recs.filter(r=>r.isFuture).map(r=>({date:selectedMonth+'-'+String(r.day).padStart(2,'0'),name:r.name,amount:r.amount,kind:r.kind}))].sort((a,b)=>a.date.localeCompare(b.date));
+ $('#view').innerHTML=`${monthPicker()}<div class="grid stats section-space math-cards"><div class="card stat"><small>הכנסה צפויה</small><strong class="up">${money(f.projectedIncome)}</strong></div><div class="math-symbol">−</div><div class="card stat"><small>הוצאה צפויה</small><strong class="down">${money(f.projectedExpense)}</strong></div><div class="math-symbol">−</div><div class="card stat"><small>מטרות וחיסכון</small><strong>${money(f.goalCommit)}</strong></div><div class="math-symbol">=</div><div class="card hero-card stat"><small>צפי לסוף החודש</small><strong>${money(f.free)}</strong></div></div><div class="grid two section-space"><div class="card"><div class="card-head"><h3>ציר הזמן של החודש</h3></div><div class="timeline-list">${events.length?events.map(e=>`<div class="timeline-row"><time><b>${new Date(e.date+'T12:00').toLocaleDateString('he-IL',{day:'2-digit'})}</b><small>${new Date(e.date+'T12:00').toLocaleDateString('he-IL',{month:'short'})}</small></time><div class="grow"><b>${esc(e.name)}</b></div><strong class="${e.kind==='income'?'up':'down'}" dir="ltr">${movementMoney(e.amount,e.kind)}</strong></div>`).join(''):empty('⌁','אין עדיין תנועות','הוסף תנועות כדי לקבל תחזית')}</div></div><div class="card"><h3>פירוש התחזית</h3><div class="forecast-formula math-ltr"><span>${money(f.projectedIncome)}<small>הכנסות</small></span><b>−</b><span>${money(f.projectedExpense)}<small>הוצאות</small></span><b>−</b><span>${money(f.goalCommit)}<small>מטרות</small></span><b>=</b><span class="${f.free>=0?'up':'down'}">${money(f.free)}<small>צפי</small></span></div>${insights().map(x=>`<div class="insight">${x}</div>`).join('')}</div></div>`
+}
+
+function sortedTransactions(rows,sort){
+ let r=[...rows];if(sort==='date_asc')r.sort((a,b)=>a.date.localeCompare(b.date));else if(sort==='date_desc')r.sort((a,b)=>b.date.localeCompare(a.date));else if(sort==='category')r.sort((a,b)=>cat(a.category).name.localeCompare(cat(b.category).name,'he'));else if(sort==='amount_desc')r.sort((a,b)=>b.amount-a.amount);else if(sort==='amount_asc')r.sort((a,b)=>a.amount-b.amount);return r
+}
+function transactions(){
+ heading('כל התנועות','מיון, חיפוש, עריכה ובקרה');let t=totals(selectedMonth),out=t.expense+t.saving,rows=sortedTransactions(monthTx(selectedMonth),'date_desc');
+ $('#view').innerHTML=`${monthPicker()}<div class="grid two transaction-totals section-space"><div class="card stat"><small>סך ההכנסות</small><strong class="up">${money(t.income)}</strong></div><div class="card stat"><small>הוצאות וחיסכונות שיצאו</small><strong class="down" dir="ltr">${movementMoney(out,'expense')}</strong></div></div><div class="toolbar section-space"><button class="primary" data-action="addTx">＋ תנועה חדשה</button><button class="ghost" data-action="addCat">＋ קטגוריה</button><input id="txSearch" placeholder="חיפוש בתנועות…"><select id="txKind"><option value="">כל הסוגים</option><option value="income">הכנסות</option><option value="expense">הוצאות</option><option value="saving">חיסכון</option><option value="transfer">העברות</option><option value="debt">החזר חוב</option></select><select id="txSort"><option value="date_desc">תאריך: חדש לישן</option><option value="date_asc">תאריך: ישן לחדש</option><option value="category">לפי קטגוריה</option><option value="amount_desc">סכום: גבוה לנמוך</option><option value="amount_asc">סכום: נמוך לגבוה</option></select></div><div class="card table-wrap" id="txList"></div>`;
+ const draw=()=>{let sorted=sortedTransactions(monthTx(selectedMonth),$('#txSort').value);$('#txList').innerHTML=sorted.length?`<table class="transactions-table"><thead><tr><th>תאריך</th><th>תיאור</th><th>קטגוריה</th><th>חשבון</th><th>סוג</th><th>סכום</th><th></th></tr></thead><tbody>${sorted.map(t=>`<tr data-kind="${t.kind}" data-search="${esc(((t.note||'')+' '+cat(t.category).name).toLowerCase())}"><td>${new Date(t.date+'T12:00').toLocaleDateString('he-IL')}</td><td><b>${esc(t.note||'-')}</b></td><td><i class="dot" style="background:${cat(t.category).color}"></i>${esc(cat(t.category).name)}</td><td>${esc(account(t.account).name)}</td><td>${typeName(t.kind)}</td><td class="${t.kind==='income'?'up':t.kind==='transfer'?'':'down'}" dir="ltr"><b>${t.kind==='transfer'?money(t.amount):movementMoney(t.amount,t.kind)}</b></td><td><button class="mini-btn" data-action="editTx" data-id="${t.id}">עריכה</button></td></tr>`).join('')}</tbody></table>`:empty('↕','אין תנועות בחודש הזה','הוסף את התנועה הראשונה שלך');bind();filterTx()};
+ draw();$('#txSearch').oninput=filterTx;$('#txKind').onchange=filterTx;$('#txSort').onchange=draw
+}
+
+function transactionSourceAccounts(){
+ let bank=db.accounts.find(a=>a.type==='asset'&&a.subtype==='bank');
+ let cash=db.accounts.find(a=>a.type==='asset'&&a.subtype==='cash');
+ return [bank,cash].filter(Boolean)
+}
+function transactionSourceOptions(selected='',includeLegacy=false){
+ let sources=transactionSourceAccounts(),chosen=selected||sources[0]?.id||'',rows=sources.map(a=>({a,label:a.subtype==='bank'?'עו״ש':'מזומן'}));
+ if(includeLegacy&&selected&&!rows.some(x=>x.a.id===selected)){
+  let legacy=db.accounts.find(a=>a.id===selected&&a.type==='asset');
+  if(legacy)rows.push({a:legacy,label:`${legacy.name} (חשבון קודם)`})
+ }
+ return rows.map(({a,label})=>`<option value="${a.id}" ${a.id===chosen?'selected':''}>${esc(label)}</option>`).join('')
+}
+function txForm(t={}){
+ let kind=t.kind||'expense';return `<div class="form-grid">${field.kind(kind)}<label>סכום<input name="amount" type="number" min="0.01" step="0.01" value="${t.amount||''}" required></label><label>תאריך<input name="date" type="date" value="${t.date||today()}" required></label>${field.categories(kind,t.category)}<label>מאיזה/לאיזה חשבון<select name="account" required>${transactionSourceOptions(t.account,!!t.id)}</select></label><label id="toAccountWrap" class="${kind==='transfer'?'':'conditional-hidden'}">חשבון יעד<select name="toAccount"><option value="">בחר חשבון יעד</option>${db.accounts.filter(a=>a.type==='asset').map(a=>`<option value="${a.id}" ${a.id===t.toAccount?'selected':''}>${esc(a.name)}</option>`).join('')}</select></label><label class="full">תיאור<input name="note" value="${esc(t.note||'')}" placeholder="למשל: קניות לשבת"></label><label class="check full"><input name="reviewed" type="checkbox" ${t.reviewed!==false?'checked':''}> התנועה נבדקה ואושרה</label></div>${field.actions}`
+}
+actions.addTx=()=>{modal('תנועה חדשה',txForm(),x=>{db.transactions.push({...x,id:uid(),amount:+x.amount,reviewed:x.reviewed==='on',createdAt:new Date().toISOString()});save('התנועה נוספה והיתרה עודכנה')});bindV6Kind()};
+actions.editTx=id=>{let t=db.transactions.find(x=>x.id===id);modal('עריכת תנועה',txForm(t)+`<button type="button" class="danger" id="deleteInside">מחיקת התנועה</button>`,x=>{Object.assign(t,x,{amount:+x.amount,reviewed:x.reviewed==='on'});save('התנועה עודכנה')});$('#deleteInside').onclick=()=>{if(confirm('למחוק את התנועה?')){db.transactions=db.transactions.filter(x=>x.id!==id);$('#modal').hidden=true;save('התנועה נמחקה והיתרה עודכנה')}};bindV6Kind()};
+function bindV6Kind(){setTimeout(()=>{let k=$('#kindField');if(k)k.onchange=()=>{let wrap=$('#toAccountWrap');wrap.classList.toggle('conditional-hidden',k.value!=='transfer');$('#catField').innerHTML=db.categories.filter(c=>c.kind===k.value||k.value==='saving'&&c.kind==='saving').sort((a,b)=>a.name.localeCompare(b.name,'he')).map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')};$$('[data-close-modal]').forEach(b=>b.onclick=()=>$('#modal').hidden=true)},0)}
+
+function ensureMonthBudget(m){if(db.budgets.some(b=>b.month===m)||!db.ironBudget.categories.length)return;db.budgets.push(...db.ironBudget.categories.map(x=>({month:m,category:x.category,amount:+x.amount||0})));db.monthPlans=db.monthPlans.filter(p=>p.month!==m);db.monthPlans.push({month:m,income:+db.ironBudget.income||0});persist()}
+function budget(){
+ ensureMonthBudget(selectedMonth);heading('התקציב החכם','כל חודש מתחיל מתקציב הברזל ונשאר גמיש לשינויים');let cats=db.categories.filter(c=>c.kind==='expense'),plan=planFor(selectedMonth),allocated=cats.reduce((s,c)=>s+budgetFor(selectedMonth,c.id),0)+db.goals.reduce((s,g)=>s+(g.monthly||0),0),left=plan.income-allocated;
+ $('#view').innerHTML=`${monthPicker()}<div class="grid three section-space"><div class="card stat"><small>הכנסה מתוכננת</small><strong>${money(plan.income)}</strong></div><div class="card stat"><small>הוקצה להוצאות ולמטרות</small><strong>${money(allocated)}</strong></div><div class="card ${left<0?'warning-card':'hero-card'} stat"><small>נותר להקצאה</small><strong>${money(left)}</strong></div></div><div class="card section-space"><div class="card-head"><div><h3>קטגוריות התקציב</h3><small class="muted">החודש הנוכחי ניתן לשינוי בלי לפגוע בתקציב הברזל</small></div><div><button class="ghost" data-action="setIronBudget">תקציב ברזל</button> <button class="ghost" data-action="applyIronBudget">החלת הברזל החודש</button> <button class="primary" data-action="setBudget">עריכת החודש</button></div></div><div class="budget-grid">${cats.map((c,index)=>{let planned=budgetFor(selectedMonth,c.id),actual=monthTx().filter(t=>t.kind==='expense'&&t.category===c.id).reduce((s,t)=>s+t.amount,0),p=planned?Math.min(100,actual/planned*100):0;return `<article class="budget-card" draggable="true" data-cat-id="${c.id}"><div class="budget-card-head"><span><i class="dot" style="background:${c.color}"></i><b>${esc(c.name)}</b></span><span class="drag-handle">⋮⋮</span></div><div class="budget-values"><strong>${money(actual)}</strong><span class="budget-out-of">מתוך ${money(planned)}</span><b class="${actual>planned&&planned?'down':''}">${planned?(actual/planned*100).toFixed(1):'0.0'}%</b></div><div class="progress"><i style="width:${p}%;background:${actual>planned&&planned?'var(--red)':c.color}"></i></div><small>נשאר ${money(Math.max(0,planned-actual))}</small><div class="mobile-order"><button data-action="moveCatUp" data-id="${c.id}">↑</button><button data-action="moveCatDown" data-id="${c.id}">↓</button></div></article>`}).join('')}</div></div>`;bindCategoryDrag()
+}
+actions.setIronBudget=()=>{let cats=db.categories.filter(c=>c.kind==='expense'),iron=db.ironBudget;modal('תקציב הברזל',`<p class="muted">זו תבנית הבסיס שממנה יתחיל כל חודש חדש.</p><div class="form-grid"><label class="full">הכנסה חודשית קבועה<input name="_income" type="number" min="0" value="${iron.income||''}"></label>${cats.map(c=>`<label>${esc(c.name)}<input name="${c.id}" type="number" min="0" value="${iron.categories.find(x=>x.category===c.id)?.amount||''}"></label>`).join('')}</div>${field.actions}`,x=>{db.ironBudget={income:+x._income||0,categories:Object.entries(x).filter(([k])=>k!=='_income').map(([category,amount])=>({category,amount:+amount||0}))};save('תקציב הברזל נשמר')})};
+actions.applyIronBudget=()=>{if(!db.ironBudget.categories.length)return toast('תחילה הגדר תקציב ברזל');let hasFlex=flexFundEntries(selectedMonth).length,message=`להחליף את תקציב החודש בתקציב הברזל? התנועות לא יימחקו.${hasFlex?' קופת הגמישות של החודש תאופס.':''}`;if(confirm(message)){db.budgets=db.budgets.filter(b=>b.month!==selectedMonth);db.budgets.push(...db.ironBudget.categories.map(x=>({month:selectedMonth,...x})));db.monthPlans=db.monthPlans.filter(p=>p.month!==selectedMonth);db.monthPlans.push({month:selectedMonth,income:db.ironBudget.income});db.budgetFlexTransfers=db.budgetFlexTransfers.filter(x=>x.month!==selectedMonth);save('תקציב הברזל הוחל על החודש')}};
+
+function wealth(){
+ heading('הון עצמי','נכסים והתחייבויות - ללא ארנקים דיגיטליים');let assets=db.accounts.filter(a=>a.type==='asset'),liabs=db.accounts.filter(a=>a.type==='liability'),net=liveAssets()-liveLiabilities(),history=[...db.snapshots].sort((a,b)=>a.month.localeCompare(b.month)),liquid=assets.filter(a=>a.liquid).reduce((s,a)=>s+effectiveBalance(a),0);
+ $('#view').innerHTML=`<div class="grid stats"><div class="card stat"><small>נכסים</small><strong class="up">${money(liveAssets())}</strong></div><div class="card stat"><small>נכסים נזילים</small><strong class="up">${money(liquid)}</strong></div><div class="card stat"><small>התחייבויות</small><strong class="down">${money(liveLiabilities())}</strong></div><div class="card hero-card stat"><small>הון נקי</small><strong>${money(net)}</strong></div></div><div class="grid two section-space"><div class="card"><div class="card-head"><h3>חשבונות ונכסים</h3><button class="primary" data-action="addAccount">＋ חשבון</button></div><div class="account-table"><div class="account-head"><span>שם החשבון</span><span>נזילות</span><span>יתרה</span><span></span></div>${assets.map(accountRow).join('')||empty('◇','אין נכסים','הוסף עו״ש, חיסכון, השקעות או רכוש')}</div><h3 class="subhead">התחייבויות</h3><div class="account-table">${liabs.map(accountRow).join('')||'<p class="muted">אין התחייבויות רשומות</p>'}</div></div><div class="card"><div class="card-head"><div><h3>התקדמות ההון</h3><small class="muted">צילום מצב חודשי</small></div><button class="ghost" data-action="snapshot">שמירת החודש</button></div>${history.length?history.slice(-12).map((s,i)=>`<div class="row"><span>${monthName(s.month)}</span><b class="${i&&s.net>=history[i-1]?.net?'up':''}">${money(s.net)}</b></div>`).join(''):empty('▥','אין עדיין היסטוריה','שמור צילום מצב בסוף כל חודש')}</div></div>`
+}
+function accountRow(a){return `<div class="account-row"><div><b>${esc(a.name)}</b></div><span class="liquidity ${a.liquid?'liquid':'locked'}">${a.type==='liability'?'התחייבות':a.liquid?'נזיל':'לא נזיל'}</span><strong>${money(a.type==='asset'?effectiveBalance(a):a.balance)}</strong><button class="mini-btn" data-action="editAccount" data-id="${a.id}">עריכה</button></div>`}
+actions.snapshot=(id,notify=true)=>{let assets=liveAssets(),liabilities=liveLiabilities(),net=assets-liabilities,bank=historicalSubtypeBalances('bank',selectedMonth),cash=historicalSubtypeBalances('cash',selectedMonth),summary=monthlyHistoryData(selectedMonth),existing=db.snapshots.find(s=>s.month===selectedMonth),values={assets,liabilities,net,bank:bank.end,cash:cash.end,openingBank:bank.start,openingCash:cash.start,income:summary.totals.income,out:summary.out,result:summary.result,categories:summary.categories,capturedAt:new Date().toISOString()};if(existing)Object.assign(existing,values);else db.snapshots.push({month:selectedMonth,...values});persist();if(notify)save('צילום ההון נשמר')};
+
+const walletTypeName=t=>({bit:'Bit',paybox:'פייבוקס',digital:'כרטיס דיגיטלי',fighter:'כרטיס אשראי פייטר',gift:'Gift Card',other:'אחר'}[t]||'אחר');
+function wallets(){
+ heading('ארנקים וכרטיסים דיגיטליים','מנוהלים בנפרד ואינם נכללים בהון העצמי');
+ $('#view').innerHTML=`<div class="grid two wallet-summary"><div class="card hero-card stat"><small>סה״כ בארנקים ובכרטיסים</small><strong>${money(walletTotal())}</strong></div><div class="card stat"><small>מספר ארנקים וכרטיסים</small><strong>${db.wallets.length}</strong></div></div><div class="card section-space"><div class="card-head"><div><h3>הארנקים שלי</h3><small class="muted">Bit, פייבוקס, כרטיס דיגיטלי, פייטר ו־Gift Card</small></div><button class="primary" data-action="addWallet">＋ הוספה</button></div><div class="wallet-grid">${db.wallets.length?db.wallets.map(w=>`<article class="wallet-card"><div class="wallet-logo">${esc(walletTypeName(w.walletType).slice(0,1))}</div><div class="grow"><small>${walletTypeName(w.walletType)}</small><b>${esc(w.name||walletTypeName(w.walletType))}</b><strong>${money(w.balance)}</strong></div><button class="mini-btn" data-action="editWallet" data-id="${w.id}">עריכה</button></article>`).join(''):empty('◈','עוד אין ארנקים','הוסף Bit, פייבוקס או כרטיס דיגיטלי')}</div></div>`
+}
+function editWallet(w={}){
+ modal(w.id?'עריכת ארנק או כרטיס':'ארנק או כרטיס חדש',`<div class="form-grid"><label>סוג<select name="walletType"><option value="bit" ${w.walletType==='bit'?'selected':''}>Bit</option><option value="paybox" ${w.walletType==='paybox'?'selected':''}>פייבוקס</option><option value="digital" ${w.walletType==='digital'?'selected':''}>כרטיס דיגיטלי</option><option value="fighter" ${w.walletType==='fighter'?'selected':''}>כרטיס אשראי פייטר</option><option value="gift" ${w.walletType==='gift'?'selected':''}>Gift Card</option><option value="other" ${w.walletType==='other'?'selected':''}>אחר</option></select></label><label>שם או תיאור<input name="name" value="${esc(w.name||'')}" placeholder="למשל: Bit אישי"></label><label>יתרה נוכחית<input name="balance" type="number" step="0.01" value="${w.balance??''}" required></label></div>${field.actions}${w.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,balance:+x.balance};if(w.id)Object.assign(w,v);else db.wallets.push({...v,id:uid()});save('הארנק נשמר')});if(w.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק?')){db.wallets=db.wallets.filter(x=>x.id!==w.id);$('#modal').hidden=true;save('נמחק')}}
+}
+
+function debts(){
+ heading('תוכנית יציאה מחובות','כל ההתחייבויות מההון העצמי מופיעות כאן אוטומטית');let accountDebts=db.accounts.filter(a=>a.type==='liability'),standalone=db.debts.filter(d=>!accountDebts.some(a=>(a.name||'').trim()===(d.name||'').trim())),total=accountDebts.reduce((s,a)=>s+a.balance,0)+standalone.reduce((s,d)=>s+d.balance,0),monthly=[...accountDebts,...standalone].reduce((s,d)=>s+(+d.payment||0),0);
+ const accountCards=accountDebts.map(d=>`<div class="card"><div class="card-head"><div><h3>${esc(d.name)}</h3><small class="muted">נלקח אוטומטית מההון העצמי</small></div><button class="mini-btn" data-action="editAccount" data-id="${d.id}">עריכה</button></div><strong class="debt-balance">${money(d.balance)}</strong><div class="row"><span>ריבית שנתית</span><b>${d.interest??'לא הוגדרה'}${d.interest!=null?'%':''}</b></div><div class="row"><span>החזר חודשי</span><b>${d.payment?money(d.payment):'לא הוגדר'}</b></div></div>`);
+ const debtCards=standalone.map(d=>{let sim=debtCalc(d,0),fast=debtCalc(d,200);return `<div class="card"><div class="card-head"><div><h3>${esc(d.name)}</h3><small class="muted">${d.interest}% ריבית שנתית</small></div><button class="mini-btn" data-action="editDebt" data-id="${d.id}">עריכה</button></div><strong class="debt-balance">${money(d.balance)}</strong><div class="row"><span>החזר חודשי</span><b>${money(d.payment)}</b></div><div class="row"><span>סיום משוער</span><b>${sim.months>=600?'לא ניתן לחשב':sim.months+' חודשים'}</b></div><div class="insight">תוספת של 200 ₪ תחסוך כ־${Math.max(0,sim.months-fast.months)} חודשים וכ־${money(Math.max(0,sim.interest-fast.interest))} ריבית.</div></div>`});
+ $('#view').innerHTML=`<div class="grid three"><div class="card stat"><small>יתרת חובות כוללת</small><strong class="down">${money(total)}</strong></div><div class="card stat"><small>החזר חודשי</small><strong>${money(monthly)}</strong></div><div class="card hero-card stat"><small>מספר התחייבויות</small><strong>${accountDebts.length+standalone.length}</strong></div></div><div class="toolbar section-space"><button class="primary" data-action="addDebt">＋ הוספת חוב מפורט</button></div><div class="grid two">${[...accountCards,...debtCards].join('')||empty('↘','אין חובות רשומים','הוסף התחייבות בהון העצמי')}</div>`
+}
+
+function editAccount(a={}){
+ modal(a.id?'עריכת חשבון':'חשבון חדש',`<div class="form-grid"><label>שם החשבון<input name="name" value="${esc(a.name||'')}" required></label><label>סוג<select name="type" id="accountType"><option value="asset" ${a.type==='asset'?'selected':''}>נכס</option><option value="liability" ${a.type==='liability'?'selected':''}>התחייבות</option></select></label><label>סוג החשבון<select name="subtype"><option value="bank" ${a.subtype==='bank'?'selected':''}>חשבון בנק</option><option value="cash" ${a.subtype==='cash'?'selected':''}>מזומן</option><option value="pension" ${a.subtype==='pension'?'selected':''}>פנסיה / גמל</option><option value="investment" ${a.subtype==='investment'?'selected':''}>השקעה</option><option value="property" ${a.subtype==='property'?'selected':''}>רכב / נדל״ן</option><option value="other" ${a.subtype==='other'?'selected':''}>אחר</option></select></label><label>יתרה נוכחית<input name="balance" type="number" step="0.01" value="${a.type==='asset'?effectiveBalance(a):a.balance??''}" required></label><label class="debt-field">ריבית שנתית %<input name="interest" type="number" min="0" step="0.01" value="${a.interest??''}"></label><label class="debt-field">החזר חודשי<input name="payment" type="number" min="0" step="0.01" value="${a.payment??''}"></label><label class="check full"><input name="liquid" type="checkbox" ${a.liquid?'checked':''}> הנכס נזיל וזמין לשימוש</label></div>${field.actions}${a.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,balance:+x.balance,interest:x.interest===''?null:+x.interest,payment:x.payment===''?null:+x.payment,liquid:x.liquid==='on',balanceAsOf:new Date().toISOString()};if(v.type==='liability')v.liquid=false;if(a.id)Object.assign(a,v);else db.accounts.push({...v,id:uid()});save('החשבון נשמר')});if(a.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק את החשבון?')){db.accounts=db.accounts.filter(x=>x.id!==a.id);$('#modal').hidden=true;save('החשבון נמחק')}}
+}
+
+// HON v7 - professional monthly overview, combined flow, scheduled goals and wallet identity.
+function signedMoney(value){let n=Number(value)||0;return `${n<0?'−':''}${numberAmount(n)} ₪`}
+function walletColor(w){return w.color||walletPalette[w.walletType]||walletPalette.other}
+function walletInitial(type){return({bit:'B',paybox:'P',digital:'D',fighter:'F',gift:'G',other:'A'}[type]||'A')}
+function monthOrdinal(m){if(!/^\d{4}-\d{2}$/.test(m||''))return 0;let[y,mo]=m.split('-').map(Number);return y*12+mo-1}
+function monthsInclusive(start,end){let a=monthOrdinal(start),b=monthOrdinal(end);return a&&b&&b>=a?b-a+1:0}
+function goalMonthlyAmount(g){
+ let remaining=Math.max(0,(+g.target||0)-(+g.current||0));
+ if(!remaining)return 0;
+ if(g.calculationMode==='manual'&&+g.monthly>0)return +g.monthly;
+ let start=g.startMonth||monthKey(),end=g.deadlineMonth||(g.date||'').slice(0,7);
+ if(!end)return +g.monthly||0;
+ let effectiveStart=monthOrdinal(monthKey())>monthOrdinal(start)?monthKey():start,count=monthsInclusive(effectiveStart,end);
+ return count?remaining/count:0
+}
+function goalIsActive(g,m){let start=g.startMonth||monthKey(),end=g.deadlineMonth||(g.date||'').slice(0,7);return m>=start&&(!end||m<=end)&&(+g.current||0)<(+g.target||0)}
+function goalMonthlyTotal(m=selectedMonth){return db.goals.filter(g=>goalIsActive(g,m)).reduce((sum,g)=>sum+goalMonthlyAmount(g),0)}
+function goalTerm(g){if(g.term==='short')return'טווח קרוב';if(g.term==='long')return'טווח רחוק';let count=monthsInclusive(g.startMonth,g.deadlineMonth||(g.date||'').slice(0,7));return count&&count<=24?'טווח קרוב':'טווח רחוק'}
+function goalStatus(g,at=monthKey()){
+ if((+g.current||0)>=(+g.target||0))return{label:'הושלמה',className:'good'};
+ if(at<(g.startMonth||at))return{label:'מתחילה בעתיד',className:'future'};
+ let end=g.deadlineMonth||(g.date||'').slice(0,7);if(end&&at>end)return{label:'עבר תאריך היעד',className:'danger'};
+ return{label:'פעילה',className:'active'}
+}
+
+function dashboard(){
+ heading(`שלום ${db.settings.name||''}, זו התמונה שלך`,`יום ${new Date().toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long'})}`);
+ let net=liveAssets()-liveLiabilities(),t=totals(monthKey()),out=t.expense+t.saving+t.debt,remaining=t.income-out,h=historyMonths(),mx=Math.max(1,...h.flatMap(x=>[x.income,x.expense])),health=healthScore(),recent=[...db.transactions].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,4);
+ let walletRows=db.wallets.map(w=>`<div class="wallet-mini"><span class="wallet-mini-logo" style="--wallet-color:${walletColor(w)}">${walletInitial(w.walletType)}</span><span class="grow"><b>${esc(w.name||walletTypeName(w.walletType))}</b><small>${walletTypeName(w.walletType)}</small></span><strong>${money(w.balance)}</strong></div>`).join('');
+ let advice=professionalInsights(monthKey()).slice(0,3);
+ $('#view').innerHTML=`
+ <div class="grid three overview-core">
+  <div class="card hero-card stat"><small>ההון הנקי</small><strong>${money(net)}</strong><span class="trend">ללא Bit, פייבוקס וארנקים דיגיטליים</span></div>
+  <div class="card stat editable-stat"><small>בעו״ש עכשיו</small><strong>${money(subtypeBalance('bank'))}</strong><span class="trend">מתעדכן מתנועות ששויכו לעו״ש</span><button class="mini-btn" data-action="correctBank">תיקון יתרה</button></div>
+  <div class="card stat editable-stat"><small>מזומן עכשיו</small><strong>${money(subtypeBalance('cash'))}</strong><span class="trend">מתעדכן מתנועות ששויכו למזומן</span><button class="mini-btn" data-action="correctCash">תיקון יתרה</button></div>
+ </div>
+ <div class="grid dashboard-monthly section-space">
+  <div class="card stat monthly-kpi income-kpi"><span class="kpi-icon">↓</span><small>הכנסות החודש</small><strong class="up">${money(t.income)}</strong><span class="trend">הכנסות שנרשמו בפועל</span></div>
+  <div class="card stat monthly-kpi expense-kpi"><span class="kpi-icon">↑</span><small>יצא החודש</small><strong class="down" dir="ltr">${signedMoney(-out)}</strong><span class="trend">הוצאות, חיסכונות והחזרי חוב</span></div>
+  <div class="card stat monthly-kpi remaining-kpi ${remaining<0?'warning-card':'balance-kpi'}"><span class="kpi-icon">=</span><small>נשאר מתוך ההכנסות</small><strong class="${remaining<0?'down':'up'}" dir="ltr">${signedMoney(remaining)}</strong><span class="trend">הכנסות פחות כל מה שיצא</span></div>
+  <div class="card wallet-overview"><div class="card-head"><div><small class="muted">כל הארנקים</small><strong>${money(walletTotal())}</strong></div><button class="mini-btn" data-page="wallets">לכל הארנקים</button></div><div class="wallet-mini-list">${walletRows||'<span class="muted">לא נוספו עדיין ארנקים דיגיטליים</span>'}</div></div>
+ </div>
+ <div class="grid two section-space"><div class="card"><div class="card-head"><div><h3>תזרים חצי־שנתי</h3><small class="muted">הכנסות מול הוצאות</small></div><span class="legend"><i class="dot green"></i>הכנסה <i class="dot soft"></i>הוצאה</span></div><div class="mini-chart">${h.map(x=>`<div><i style="height:${x.expense/mx*100}%"></i><i style="height:${x.income/mx*100}%"></i></div>`).join('')}</div><div class="chart-labels">${h.map(x=>`<span>${x.label}</span>`).join('')}</div></div><div class="card"><div class="card-head"><div><h3>בריאות פיננסית</h3><small class="muted">מדד לפי תזרים, חוב, תקציב ומטרות</small></div></div><div class="health"><div class="ring" style="--p:${health.score}" data-value="${health.score}"></div><div><h4>${health.score>=80?'מצב מצוין':health.score>=60?'בדרך הנכונה':health.score>=40?'צריך לחזק':'דורש פעולה'}</h4><p class="muted">${health.notes[0]||'המשיכו כך'}</p></div></div><button class="ghost full-btn" data-page="review">לבדיקת החודש המלאה</button></div></div>
+ <div class="grid two section-space dashboard-lower"><div class="card"><div class="card-head"><div><h3>פעילות אחרונה</h3><small class="muted">${db.transactions.length} תנועות בסך הכול</small></div><button class="ghost" data-action="addTx">＋ תנועה</button></div>${recent.length?recent.map(txRow).join(''):empty('＋','מתחילים מכאן','הוסף הכנסה או הוצאה ראשונה')}</div><div class="card dashboard-advice-card"><div class="card-head"><div><h3>הצעות ייעול</h3><small class="muted">מה כדאי לעשות עכשיו, לפי הנתונים שלך</small></div><span class="advice-count">${advice.length}</span></div><div class="dashboard-advice-list">${advice.map((x,i)=>`<article class="dashboard-insight ${x.level}"><span class="dashboard-insight-index">${i+1}</span><div><h4>${x.title}</h4><p>${x.text}</p><strong>הפעולה המומלצת</strong><small>${x.action}</small></div></article>`).join('')}</div></div></div>`
+}
+
+function combinedTransactionsPanel(){
+ return `<div class="toolbar section-space"><button class="primary" data-action="addTx">＋ תנועה חדשה</button><button class="ghost" data-action="addCat">＋ קטגוריה</button><input id="txSearch" placeholder="חיפוש בתנועות…"><select id="txKind"><option value="">כל הסוגים</option><option value="income">הכנסות</option><option value="expense">הוצאות</option><option value="saving">חיסכון</option><option value="transfer">העברות</option><option value="debt">החזר חוב</option></select><select id="txSort"><option value="date_desc">תאריך: חדש לישן</option><option value="date_asc">תאריך: ישן לחדש</option><option value="category">לפי קטגוריה</option><option value="amount_desc">סכום: גבוה לנמוך</option><option value="amount_asc">סכום: נמוך לגבוה</option></select></div><div class="card table-wrap" id="txList"></div>`
+}
+function budgetWorkspace(){
+ ensureMonthBudget(selectedMonth);
+ let manualCats=db.categories.filter(c=>c.kind==='expense'),actualByCat=new Map(manualCats.map(c=>[c.id,monthTx(selectedMonth).filter(t=>t.kind==='expense'&&t.category===c.id).reduce((s,t)=>s+t.amount,0)])),remainingByCat=new Map(manualCats.map(c=>[c.id,budgetFor(selectedMonth,c.id)-(actualByCat.get(c.id)||0)])),sortMode=db.settings.budgetSort||'manual',cats=[...manualCats];
+ if(sortMode==='spent_desc')cats.sort((a,b)=>actualByCat.get(b.id)-actualByCat.get(a.id));if(sortMode==='spent_asc')cats.sort((a,b)=>actualByCat.get(a.id)-actualByCat.get(b.id));
+ if(sortMode==='remaining_desc')cats.sort((a,b)=>remainingByCat.get(b.id)-remainingByCat.get(a.id));if(sortMode==='remaining_asc')cats.sort((a,b)=>remainingByCat.get(a.id)-remainingByCat.get(b.id));
+ return `<section class="card budget-categories-card combined-budget-panel"><div class="card-head budget-head"><div><span class="section-kicker">התקציב של ${monthName(selectedMonth)}</span><h3>קטגוריות התקציב</h3><small class="muted">כמה נשאר, כמה יצא ומה היה היעד בכל קטגוריה</small></div><div class="budget-tools"><label class="sort-label">סידור<select id="budgetSort"><option value="manual" ${sortMode==='manual'?'selected':''}>הסדר הידני שלי</option><option value="remaining_desc" ${sortMode==='remaining_desc'?'selected':''}>הכי הרבה נשאר תחילה</option><option value="remaining_asc" ${sortMode==='remaining_asc'?'selected':''}>הכי מעט נשאר / חריגה תחילה</option><option value="spent_desc" ${sortMode==='spent_desc'?'selected':''}>ההוצאה הגבוהה תחילה</option><option value="spent_asc" ${sortMode==='spent_asc'?'selected':''}>ההוצאה הנמוכה תחילה</option></select></label><button class="ghost" data-action="setIronBudget">תקציב ברזל</button><button class="ghost" data-action="applyIronBudget">החלת הברזל</button><button class="primary" data-action="setBudget">עריכת החודש</button></div></div><div class="budget-grid">${cats.map((c,index)=>{let planned=budgetFor(selectedMonth,c.id),actual=actualByCat.get(c.id)||0,p=planned?Math.min(100,actual/planned*100):actual?100:0,over=actual>planned,remaining=planned-actual,label=over?(planned?'חריגה':'חריגה ללא יעד'):'נשאר',displayAmount=over?(planned?actual-planned:actual):remaining;return `<article class="budget-card ${over?'overspent':'within-budget'}" ${sortMode==='manual'?'draggable="true"':''} data-cat-id="${c.id}"><div class="budget-card-head"><span><i class="dot" style="background:${c.color}"></i><b>${esc(c.name)}</b></span>${sortMode==='manual'?'<span class="drag-handle" aria-label="שינוי סדר">⋮⋮</span>':''}</div><div class="budget-remaining ${over?'over':'ok'}"><small>${label}</small><strong>${money(displayAmount)}</strong></div><div class="budget-facts"><span><small>הוצאתי בפועל</small><b>${money(actual)}</b></span><span><small>היעד החודשי</small><b>${money(planned)}</b></span></div><div class="progress budget-progress" aria-label="${label} ${money(displayAmount)}"><i style="width:${p}%;background:${over?'var(--red)':c.color}"></i></div>${sortMode==='manual'?`<div class="mobile-order"><button data-action="moveCatUp" data-id="${c.id}" ${index===0?'disabled':''} aria-label="הזזה למעלה">↑</button><button data-action="moveCatDown" data-id="${c.id}" ${index===cats.length-1?'disabled':''} aria-label="הזזה למטה">↓</button></div>`:''}</article>`}).join('')}</div></section>`
+}
+function bindBudgetWorkspace(){
+ let sort=$('#budgetSort');if(!sort)return;
+ sort.onchange=e=>{db.settings.budgetSort=e.target.value;save('סדר התקציב עודכן')};
+ if((db.settings.budgetSort||'manual')==='manual')bindCategoryDrag()
+}
+function forecastPanel(){
+ let f=forecast(selectedMonth);
+ return `<div class="planning-workspace"><section class="forecast-summary"><div class="forecast-summary-head"><div><span class="section-kicker">תחזית החודש</span><h3>כך צפוי להסתיים החודש</h3></div><small>הכנסות פחות הוצאות ומטרות</small></div><div class="grid stats math-cards compact-forecast"><div class="card stat"><small>הכנסה צפויה</small><strong class="up">${money(f.projectedIncome)}</strong></div><div class="math-symbol">−</div><div class="card stat"><small>הוצאה צפויה</small><strong class="down">${money(f.projectedExpense)}</strong></div><div class="math-symbol">−</div><div class="card stat"><small>מטרות פעילות</small><strong>${money(f.goalCommit)}</strong></div><div class="math-symbol">=</div><div class="card hero-card stat"><small>צפי לסוף החודש</small><strong dir="ltr">${signedMoney(f.free)}</strong></div></div></section>${budgetWorkspace()}</div>`
+}
+function drawCombinedTransactions(){
+ let list=$('#txList'),sort=$('#txSort');if(!list||!sort)return;let rows=sortedTransactions(monthTx(selectedMonth),sort.value);
+ list.innerHTML=rows.length?`<table class="transactions-table"><thead><tr><th>תאריך</th><th>תיאור</th><th>קטגוריה</th><th>חשבון</th><th>סוג</th><th>סכום</th><th></th></tr></thead><tbody>${rows.map(t=>`<tr data-kind="${t.kind}" data-search="${esc(((t.note||'')+' '+cat(t.category).name).toLowerCase())}"><td>${new Date(t.date+'T12:00').toLocaleDateString('he-IL')}</td><td><b>${esc(t.note||'-')}</b></td><td><i class="dot" style="background:${cat(t.category).color}"></i>${esc(cat(t.category).name)}</td><td>${esc(account(t.account).name)}</td><td>${typeName(t.kind)}</td><td class="${t.kind==='income'?'up':t.kind==='transfer'?'':'down'}" dir="ltr"><b>${t.kind==='income'?money(t.amount):t.kind==='transfer'?money(t.amount):signedMoney(-t.amount)}</b></td><td><button class="mini-btn" data-action="editTx" data-id="${t.id}">עריכה</button></td></tr>`).join('')}</tbody></table>`:empty('↕','אין תנועות בחודש הזה','הוסף את התנועה הראשונה שלך');
+ $$('#txList [data-action]').forEach(b=>b.onclick=()=>actions[b.dataset.action]?.(b.dataset.id));filterCombinedTransactions()
+}
+function filterCombinedTransactions(){let search=$('#txSearch'),kind=$('#txKind');if(!search||!kind)return;let q=search.value.toLowerCase(),k=kind.value;$$('#txList tbody tr').forEach(r=>r.hidden=!!((q&&!r.dataset.search.includes(q))||(k&&r.dataset.kind!==k)))}
+function cashflow(){
+ heading('תקציב ותזרים','התנועות, התחזית והתקציב החודשי במקום אחד');let t=totals(selectedMonth),out=t.expense+t.saving+t.debt,balance=t.income-out;
+ $('#view').innerHTML=`${monthPicker()}<div class="grid three flow-actuals section-space"><div class="card stat"><small>הכנסות בפועל</small><strong class="up">${money(t.income)}</strong></div><div class="card stat"><small>יצא בפועל</small><strong class="down" dir="ltr">${signedMoney(-out)}</strong></div><div class="card ${balance<0?'warning-card':'hero-card'} stat"><small>מאזן בפועל</small><strong dir="ltr">${signedMoney(balance)}</strong></div></div><div class="segmented section-space combined-tabs"><button class="${flowView==='transactions'?'active':''}" data-flow-tab="transactions">תנועות ועריכה</button><button class="${flowView==='forecast'?'active':''}" data-flow-tab="forecast">תקציב ותחזית</button></div>${flowView==='transactions'?combinedTransactionsPanel():forecastPanel()}`;
+ $$('[data-flow-tab]').forEach(b=>b.onclick=()=>{flowView=b.dataset.flowTab;render()});
+ if(flowView==='transactions'){drawCombinedTransactions();$('#txSearch').oninput=filterCombinedTransactions;$('#txKind').onchange=filterCombinedTransactions;$('#txSort').onchange=drawCombinedTransactions}else bindBudgetWorkspace()
+}
+
+function budget(){
+ ensureMonthBudget(selectedMonth);heading('התקציב החכם','סדר ידני קבוע או מיון לפי ההוצאה בפועל');
+ let manualCats=db.categories.filter(c=>c.kind==='expense'),actualByCat=new Map(manualCats.map(c=>[c.id,monthTx(selectedMonth).filter(t=>t.kind==='expense'&&t.category===c.id).reduce((s,t)=>s+t.amount,0)])),remainingByCat=new Map(manualCats.map(c=>[c.id,budgetFor(selectedMonth,c.id)-(actualByCat.get(c.id)||0)])),sortMode=db.settings.budgetSort||'manual',cats=[...manualCats];
+ if(sortMode==='spent_desc')cats.sort((a,b)=>actualByCat.get(b.id)-actualByCat.get(a.id));if(sortMode==='spent_asc')cats.sort((a,b)=>actualByCat.get(a.id)-actualByCat.get(b.id));
+ if(sortMode==='remaining_desc')cats.sort((a,b)=>remainingByCat.get(b.id)-remainingByCat.get(a.id));if(sortMode==='remaining_asc')cats.sort((a,b)=>remainingByCat.get(a.id)-remainingByCat.get(b.id));
+ let plan=planFor(selectedMonth),allocated=manualCats.reduce((s,c)=>s+budgetFor(selectedMonth,c.id),0)+goalMonthlyTotal(selectedMonth),left=plan.income-allocated;
+ $('#view').innerHTML=`${monthPicker()}<div class="grid three section-space budget-summary"><div class="card stat"><small>הכנסה מתוכננת</small><strong>${money(plan.income)}</strong></div><div class="card stat"><small>הוקצה להוצאות ולמטרות</small><strong>${money(allocated)}</strong></div><div class="card ${left<0?'warning-card':'hero-card'} stat"><small>נותר להקצאה</small><strong dir="ltr">${signedMoney(left)}</strong></div></div><div class="card section-space budget-categories-card"><div class="card-head budget-head"><div><h3>קטגוריות התקציב</h3><small class="muted">בכל כרטיס רואים מיד כמה נשאר, כמה יצא ומה היה היעד</small></div><div class="budget-tools"><label class="sort-label">סידור<select id="budgetSort"><option value="manual" ${sortMode==='manual'?'selected':''}>הסדר הידני שלי</option><option value="remaining_desc" ${sortMode==='remaining_desc'?'selected':''}>הכי הרבה נשאר תחילה</option><option value="remaining_asc" ${sortMode==='remaining_asc'?'selected':''}>הכי מעט נשאר / חריגה תחילה</option><option value="spent_desc" ${sortMode==='spent_desc'?'selected':''}>ההוצאה הגבוהה תחילה</option><option value="spent_asc" ${sortMode==='spent_asc'?'selected':''}>ההוצאה הנמוכה תחילה</option></select></label><button class="ghost" data-action="setIronBudget">תקציב ברזל</button><button class="ghost" data-action="applyIronBudget">החלת הברזל</button><button class="primary" data-action="setBudget">עריכת החודש</button></div></div><div class="budget-grid">${cats.map((c,index)=>{let planned=budgetFor(selectedMonth,c.id),actual=actualByCat.get(c.id)||0,p=planned?Math.min(100,actual/planned*100):actual?100:0,over=actual>planned,remaining=planned-actual,label=over?(planned?'חריגה':'חריגה ללא יעד'):'נשאר',displayAmount=over?(planned?actual-planned:actual):remaining;return `<article class="budget-card ${over?'overspent':'within-budget'}" ${sortMode==='manual'?'draggable="true"':''} data-cat-id="${c.id}"><div class="budget-card-head"><span><i class="dot" style="background:${c.color}"></i><b>${esc(c.name)}</b></span>${sortMode==='manual'?'<span class="drag-handle" aria-label="שינוי סדר">⋮⋮</span>':''}</div><div class="budget-remaining ${over?'over':'ok'}"><small>${label}</small><strong>${money(displayAmount)}</strong></div><div class="budget-facts"><span><small>הוצאתי בפועל</small><b>${money(actual)}</b></span><span><small>היעד החודשי</small><b>${money(planned)}</b></span></div><div class="progress budget-progress" aria-label="${label} ${money(displayAmount)}"><i style="width:${p}%;background:${over?'var(--red)':c.color}"></i></div>${sortMode==='manual'?`<div class="mobile-order"><button data-action="moveCatUp" data-id="${c.id}" ${index===0?'disabled':''} aria-label="הזזה למעלה">↑</button><button data-action="moveCatDown" data-id="${c.id}" ${index===cats.length-1?'disabled':''} aria-label="הזזה למטה">↓</button></div>`:''}</article>`}).join('')}</div></div>`;
+ $('#budgetSort').onchange=e=>{db.settings.budgetSort=e.target.value;save('סדר התקציב עודכן')};if(sortMode==='manual')bindCategoryDrag()
+}
+
+function wallets(){
+ heading('ארנקים וכרטיסים דיגיטליים','לכל סוג זהות וצבע משלו - בנפרד מההון העצמי');
+ $('#view').innerHTML=`<div class="grid two wallet-summary"><div class="card hero-card stat"><small>סה״כ בארנקים ובכרטיסים</small><strong>${money(walletTotal())}</strong></div><div class="card stat"><small>מספר ארנקים וכרטיסים</small><strong>${db.wallets.length}</strong></div></div><div class="card section-space"><div class="card-head"><div><h3>הארנקים שלי</h3><small class="muted">הצבע נקבע לפי הסוג ואפשר לשנות אותו בעריכה</small></div><button class="primary" data-action="addWallet">＋ הוספה</button></div><div class="wallet-grid">${db.wallets.length?db.wallets.map(w=>`<article class="wallet-card" style="--wallet-color:${walletColor(w)}"><div class="wallet-logo">${walletInitial(w.walletType)}</div><div class="grow"><small>${walletTypeName(w.walletType)}</small><b>${esc(w.name||walletTypeName(w.walletType))}</b><strong>${money(w.balance)}</strong></div><button class="mini-btn" data-action="editWallet" data-id="${w.id}">עריכה</button></article>`).join(''):empty('◈','עוד אין ארנקים','הוסף Bit, פייבוקס או כרטיס דיגיטלי')}</div></div>`
+}
+function editWallet(w={}){
+ let defaultType=w.walletType||'bit',defaultColor=walletColor({...w,walletType:defaultType});
+ modal(w.id?'עריכת ארנק או כרטיס':'ארנק או כרטיס חדש',`<div class="form-grid"><label>סוג<select name="walletType" id="walletTypeField"><option value="bit" ${defaultType==='bit'?'selected':''}>Bit</option><option value="paybox" ${defaultType==='paybox'?'selected':''}>פייבוקס</option><option value="digital" ${defaultType==='digital'?'selected':''}>כרטיס דיגיטלי</option><option value="fighter" ${defaultType==='fighter'?'selected':''}>כרטיס אשראי פייטר</option><option value="gift" ${defaultType==='gift'?'selected':''}>Gift Card</option><option value="other" ${defaultType==='other'?'selected':''}>אחר</option></select></label><label>צבע הארנק<input name="color" id="walletColorField" type="color" value="${defaultColor}"></label><label>שם או תיאור<input name="name" value="${esc(w.name||'')}" placeholder="למשל: Bit אישי"></label><label>יתרה נוכחית<input name="balance" type="number" step="0.01" value="${w.balance??''}" required></label></div>${field.actions}${w.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,balance:+x.balance,color:x.color||walletPalette[x.walletType]||walletPalette.other};if(w.id)Object.assign(w,v);else db.wallets.push({...v,id:uid()});save('הארנק נשמר')});
+ $('#walletTypeField').onchange=e=>{$('#walletColorField').value=walletPalette[e.target.value]||walletPalette.other};if(w.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק?')){db.wallets=db.wallets.filter(x=>x.id!==w.id);$('#modal').hidden=true;save('נמחק')}}
+}
+
+function goals(){
+ heading('מטרות פיננסיות','לדעת מתי להתחיל, איפה הכסף נמצא וכמה לחסוך');
+ let sorted=[...db.goals].sort((a,b)=>(a.startMonth||'').localeCompare(b.startMonth||'')||((a.deadlineMonth||'').localeCompare(b.deadlineMonth||'')));
+ let active=sorted.filter(g=>goalIsActive(g,selectedMonth)),monthlyTotal=active.reduce((s,g)=>s+goalMonthlyAmount(g),0),targets=sorted.reduce((s,g)=>s+(+g.target||0),0),saved=sorted.reduce((s,g)=>s+(+g.current||0),0);
+ let cards=sorted.map(g=>{
+  let p=Math.min(100,g.target?g.current/g.target*100:0),needed=goalMonthlyAmount(g),status=goalStatus(g),end=g.deadlineMonth||(g.date||'').slice(0,7);
+  return `<article class="card goal-card goal-card-smart"><div class="goal-card-top"><div class="goal-title-wrap"><span class="goal-icon">◎</span><div><h3>${esc(g.name)}</h3><span class="goal-status ${status.className}">${status.label}</span></div></div><button class="goal-edit-btn" data-action="editGoal" data-id="${g.id}" aria-label="עריכת ${esc(g.name)}">•••</button></div><div class="goal-progress-copy"><div><strong>${money(g.current)}</strong><span>מתוך ${money(g.target)}</span></div><b>${numberAmount(p)}%</b></div><div class="progress goal-progress"><i style="width:${p}%"></i></div><div class="goal-smart-grid"><div class="goal-smart-item featured"><small>צריך לחסוך בחודש</small><strong>${needed?money(needed):'-'}</strong></div><div class="goal-smart-item"><small>תאריך היעד</small><b>${end?monthName(end):'לא הוגדר'}</b></div><div class="goal-smart-item full"><small>הכסף נמצא ב־</small><b>${esc(g.moneyLocation||'לא הוגדר')}</b></div></div><div class="goal-card-footer"><span class="term-badge ${g.term||'long'}">${goalTerm(g)}</span><button class="primary goal-deposit-btn" data-action="deposit" data-id="${g.id}">＋ הפקדה</button></div></article>`
+ }).join('');
+ let timeline=sorted.map(g=>{
+  let status=goalStatus(g),end=g.deadlineMonth||(g.date||'').slice(0,7);
+  return `<tr><td data-label="מטרה"><b>${esc(g.name)}</b><small>${goalTerm(g)}</small></td><td data-label="מיקום הכסף">${esc(g.moneyLocation||'לא הוגדר')}</td><td data-label="מתחילים">${g.startMonth?monthName(g.startMonth):'לא הוגדר'}</td><td data-label="יעד">${end?monthName(end):'לא הוגדר'}</td><td data-label="סכום יעד">${money(g.target)}</td><td data-label="חיסכון חודשי"><b>${goalMonthlyAmount(g)?money(goalMonthlyAmount(g)):'-'}</b></td><td data-label="מצב"><span class="goal-status ${status.className}">${status.label}</span></td></tr>`
+ }).join('');
+ if(mobileDevice||window.innerWidth<=720){
+  let mobileCards=sorted.map(g=>{
+   let p=Math.min(100,g.target?g.current/g.target*100:0),needed=goalMonthlyAmount(g),status=goalStatus(g),end=g.deadlineMonth||(g.date||'').slice(0,7);
+   return `<article class="mobile-goal-card"><div class="mobile-goal-head"><div class="mobile-goal-title"><span class="mobile-goal-icon">◎</span><div><h3>${esc(g.name)}</h3><span class="goal-status ${status.className}">${status.label}</span></div></div><button class="goal-edit-btn" data-action="editGoal" data-id="${g.id}" aria-label="עריכת ${esc(g.name)}">•••</button></div><div class="mobile-goal-progress-copy"><span><b>${money(g.current)}</b><small>נצבר מתוך ${money(g.target)}</small></span><strong>${numberAmount(p)}%</strong></div><div class="progress mobile-goal-progress"><i style="width:${p}%"></i></div><div class="mobile-goal-facts"><div><small>לחיסכון בחודש</small><b>${needed?money(needed):'-'}</b></div><div><small>תאריך היעד</small><b>${end?monthName(end):'לא הוגדר'}</b></div></div><div class="mobile-goal-location"><span>⌖</span><div><small>הכסף נמצא ב־</small><b>${esc(g.moneyLocation||'לא הוגדר')}</b></div></div><div class="mobile-goal-actions"><span class="term-badge ${g.term||'long'}">${goalTerm(g)}</span><button class="primary" data-action="deposit" data-id="${g.id}">＋ הפקדה</button></div></article>`
+  }).join('');
+  $('#view').innerHTML=`<div class="mobile-goals-page"><div class="mobile-goals-topbar"><div><span class="mobile-goals-kicker">תוכנית פיננסית</span><h2>המטרות שלי</h2><small>${sorted.length?`${sorted.length} מטרות מסודרות לפי זמן`:'כאן מתחילים לתכנן'}</small></div><button class="primary mobile-goal-add" data-action="addGoal"><span>＋</span> מטרה</button></div><section class="mobile-goals-overview"><div class="mobile-overview-head"><div><small>החיסכון הדרוש בחודש</small><b>${monthName(selectedMonth)}</b></div><span class="mobile-overview-icon">◎</span></div><div class="mobile-month-picker"><button class="ghost" data-month="-1" aria-label="חודש קודם">‹</button><input id="goalMonthJump" type="month" value="${selectedMonth}" aria-label="בחירת חודש"><button class="ghost" data-month="1" aria-label="חודש הבא">›</button></div><strong class="mobile-monthly-total">${money(monthlyTotal)}</strong><small class="mobile-monthly-caption">${active.length?`${active.length} מטרות פעילות בחודש הזה`:'אין מטרות פעילות בחודש הזה'}</small><div class="mobile-overview-metrics"><div><small>כבר נצבר</small><b>${money(saved)}</b></div><div><small>יעד כולל</small><b>${money(targets)}</b></div><div><small>פעילות</small><b>${active.length}</b></div></div></section><section class="mobile-goals-list"><div class="mobile-section-title"><div><h3>כל המטרות</h3><small>לחיצה על שלוש הנקודות מאפשרת לערוך</small></div></div>${mobileCards||`<div class="mobile-goals-empty"><span>◎</span><h3>עוד אין מטרות</h3><p>אפשר להתחיל מקרן חירום, חופשה או אירוע משפחתי.</p><button class="primary" data-action="addGoal">יצירת מטרה ראשונה</button></div>`}</section><details id="goalsSchedule" class="card mobile-goals-schedule"><summary><span><b>לוח זמנים מלא</b><small>כל התאריכים והסכומים</small></span><em>פתיחה</em></summary>${sorted.length?`<div class="goals-table-wrap"><table class="goals-table"><tbody>${timeline}</tbody></table></div>`:empty('◎','אין עדיין מטרות','הוסף מטרה עם חודש התחלה ותאריך יעד')}</details></div>`;
+  $('#goalMonthJump').onchange=e=>{if(e.target.value){selectedMonth=e.target.value;render()}};
+  $('#goalsSchedule').open=false;
+  return
+ }
+ let activeRows=active.map(g=>`<div class="goal-load-row smart-load-row"><span><b>${esc(g.name)}</b><small>${esc(g.moneyLocation||'מיקום לא הוגדר')}${g.deadlineMonth?` · עד ${monthName(g.deadlineMonth)}`:''}</small></span><strong>${money(goalMonthlyAmount(g))}</strong></div>`).join('');
+ $('#view').innerHTML=`<div class="goals-toolbar"><div><h2>תוכנית המטרות שלי</h2><p>הכול במקום אחד, לפי החודש שבחרת</p></div><button class="primary" data-action="addGoal">＋ מטרה חדשה</button></div><div class="grid two goal-stats goal-stats-compact"><div class="card stat"><small>סך כל היעדים</small><strong>${money(targets)}</strong><span class="trend">${sorted.length} מטרות</span></div><div class="card stat"><small>כבר נצבר</small><strong class="up">${money(saved)}</strong><span class="trend">${targets?numberAmount(saved/targets*100):0}% מכלל היעדים</span></div></div><div class="goals-command section-space"><section class="card goal-month-panel smart-goal-panel"><div class="smart-panel-head"><div><small>תוכנית החיסכון לחודש</small><h3>${monthName(selectedMonth)}</h3></div><span class="smart-panel-icon">◎</span></div><div class="goal-month-picker"><button class="ghost" data-month="-1" aria-label="חודש קודם">‹</button><input id="goalMonthJump" type="month" value="${selectedMonth}" aria-label="בחירת חודש"><button class="ghost" data-month="1" aria-label="חודש הבא">›</button></div><div class="goal-load-summary"><strong class="goal-load-total">${money(monthlyTotal)}</strong><span>סך הכול לחיסכון החודש</span><small>${active.length?`${active.length} מטרות פעילות`:'אין מטרות פעילות בחודש הזה'}</small></div><div class="goal-load-list">${activeRows||'<div class="smart-empty">אפשר לעבור לחודש אחר או להוסיף מטרה חדשה</div>'}</div></section><section class="goals-main"><div class="goals-section-head"><div><h3>המטרות שלי</h3><small>${sorted.length?'מסודרות לפי מועד ההתחלה':'כאן יופיעו המטרות שלך'}</small></div></div><div class="goal-cards goal-cards-smart">${cards||empty('◎','אין עדיין מטרות','קרן חירום, בר מצווה, בית או חופשה')}</div></section></div><details id="goalsSchedule" class="card goals-schedule goals-schedule-details section-space"><summary><span><b>לוח זמנים מלא</b><small>כל התאריכים והסכומים בטבלה אחת</small></span><em>${sorted.length} מטרות</em></summary>${sorted.length?`<div class="goals-table-wrap"><table class="goals-table"><thead><tr><th>מטרה</th><th>איפה הכסף</th><th>מתחילים</th><th>יעד</th><th>סכום יעד</th><th>לחודש</th><th>מצב</th></tr></thead><tbody>${timeline}</tbody></table></div>`:empty('◎','אין עדיין מטרות','הוסף מטרה עם חודש התחלה ותאריך יעד')}</details>`;
+ $('#goalMonthJump').onchange=e=>{if(e.target.value){selectedMonth=e.target.value;render()}};$('#goalsSchedule').open=!mobileDevice&&window.innerWidth>720
+}
+function bindGoalCalculator(){
+ let start=$('#goalStart'),end=$('#goalEnd'),target=$('#goalTarget'),currentInput=$('#goalCurrent'),preview=$('#goalCalc');if(!start||!end)return;
+ const update=()=>{end.min=start.value;if(end.value&&end.value<start.value)end.value=start.value;let count=monthsInclusive(start.value,end.value),remaining=Math.max(0,(+target.value||0)-(+currentInput.value||0)),monthly=count?remaining/count:0;preview.innerHTML=count?`<b>${money(monthly)}</b> בחודש למשך ${count} חודשים`:'בחר חודש התחלה וחודש יעד'};
+ [start,end,target,currentInput].forEach(el=>el.oninput=update);update()
+}
+function editGoal(g={}){
+ let start=g.startMonth||monthKey(),end=g.deadlineMonth||(g.date||'').slice(0,7)||start;
+ modal(g.id?'עריכת מטרה':'מטרה פיננסית חדשה',`<div class="form-grid"><label class="full">שם המטרה<input name="name" value="${esc(g.name||'')}" placeholder="למשל: בר מצווה" required></label><label class="full">איפה הכסף נמצא?<input name="moneyLocation" value="${esc(g.moneyLocation||'')}" placeholder="למשל: פיקדון בבנק, קופת גמל או מעטפת מזומן"></label><label>סוג הטווח<select name="term"><option value="short" ${g.term==='short'?'selected':''}>טווח קרוב</option><option value="long" ${g.term!=='short'?'selected':''}>טווח רחוק</option></select></label><label>סכום יעד<input id="goalTarget" name="target" type="number" min="1" step="0.01" value="${g.target||''}" required></label><label>כבר נצבר<input id="goalCurrent" name="current" type="number" min="0" step="0.01" value="${g.current||0}"></label><label>מתחילים לחסוך בחודש<input id="goalStart" name="startMonth" type="month" value="${start}" required></label><label>צריך להגיע ליעד עד<input id="goalEnd" name="deadlineMonth" type="month" min="${start}" value="${end}" required></label><div class="goal-calculator full"><small>החישוב האוטומטי</small><div id="goalCalc"></div></div></div>${field.actions}${g.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,target:+x.target,current:+x.current,startMonth:x.startMonth,deadlineMonth:x.deadlineMonth,date:x.deadlineMonth+'-01',calculationMode:'auto',moneyLocation:x.moneyLocation||'',term:x.term||'long'};v.monthly=goalMonthlyAmount(v);if(g.id)Object.assign(g,v);else db.goals.push({...v,id:uid()});save('המטרה והתוכנית החודשית נשמרו')});bindGoalCalculator();if(g.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק את המטרה?')){db.goals=db.goals.filter(x=>x.id!==g.id);$('#modal').hidden=true;save('המטרה נמחקה')}}
+}
+actions.deposit=id=>{let g=db.goals.find(x=>x.id===id),bank=db.accounts.find(a=>a.type==='asset'&&a.subtype==='bank')?.id||db.accounts.find(a=>a.type==='asset')?.id||'';modal('הפקדה למטרה',`<div class="form-grid"><label>סכום ההפקדה<input name="amount" type="number" min="0.01" step="0.01" required></label><label>מאיזה חשבון יצא הכסף<select name="account"><option value="">ללא שיוך</option>${db.accounts.filter(a=>a.type==='asset').map(a=>`<option value="${a.id}" ${a.id===bank?'selected':''}>${esc(a.name)}</option>`).join('')}</select></label></div>${field.actions}`,x=>{let amount=+x.amount;g.current+=amount;db.transactions.push({id:uid(),date:today(),kind:'saving',amount,account:x.account||'',category:db.categories.find(c=>c.kind==='saving')?.id,note:`הפקדה: ${g.name}`,reviewed:true,createdAt:new Date().toISOString()});save('ההפקדה נרשמה והיתרה עודכנה')})};
+
+function decorateSmartUi(){
+ if(current==='settings')$$('#categorySorter [data-cat-id]').forEach(row=>{let c=db.categories.find(x=>x.id===row.dataset.catId),meta=row.querySelector('small');if(c?.kind==='expense'&&meta&&!meta.dataset.behavior){meta.dataset.behavior='1';meta.textContent+=` · ${categoryBehaviorLabel(c)}`}});
+ if(current==='reports'){
+  let panel=$('.insights-panel'),title=panel?.querySelector('.card-head h3'),subtitle=panel?.querySelector('.card-head small');if(title)title.textContent='ניתוח תקציבי חכם';if(subtitle)subtitle.textContent='קבועות נבדקות כתשלום; גמישות לפי קצב';
+  $$('.analysis-card>div>b').forEach(label=>label.textContent='הפעולה המומלצת:')
+ }
+}
+function decorateBudgetCards(){
+ if(current!=='budget'&&!(current==='cashflow'&&flowView==='forecast'))return;
+ $$('.budget-card[data-cat-id]').forEach(card=>{
+  const id=card.dataset.catId,planned=budgetFor(selectedMonth,id),actual=monthTx(selectedMonth).filter(t=>t.kind==='expense'&&t.category===id).reduce((s,t)=>s+t.amount,0),over=actual>planned;
+  card.classList.toggle('overspent',over);
+  card.classList.toggle('within-budget',!over)
+ })
+}
+
+// HON v17 - Financial Maturity design system and smarter financial workflows.
+var reviewStep=1;
+function financialMaturity(){
+ const score=healthScore().score;
+ if(score>=82)return{score,label:'ניהול פיננסי בשל',hint:'התזרים, התקציב והמטרות נמצאים בשליטה',tone:'mature'};
+ if(score>=64)return{score,label:'צמיחה מבוקרת',hint:'הבסיס טוב; השלב הבא הוא לחזק עקביות ורזרבות',tone:'growing'};
+ if(score>=42)return{score,label:'ביסוס שליטה',hint:'ממשיכים לסגור פערים בתקציב, בחובות ובמטרות',tone:'building'};
+ return{score,label:'מתחילים מסודר',hint:'עוד כמה נתונים חודשיים יתנו תמונה מדויקת יותר',tone:'starting'}
+}
+function walletExpiryMeta(w){
+ if(!w.expiryDate)return null;
+ const end=new Date(w.expiryDate+'T23:59:59'),now=new Date(),days=Math.ceil((end-now)/86400000);
+ if(days<0)return{days,label:'פג תוקף',tone:'expired'};
+ if(days===0)return{days,label:'פג היום',tone:'urgent'};
+ if(days<=30)return{days,label:`נותרו ${days} ימים`,tone:'urgent'};
+ if(days<=90)return{days,label:`נותרו ${days} ימים`,tone:'soon'};
+ return{days,label:`בתוקף עד ${new Date(w.expiryDate+'T12:00').toLocaleDateString('he-IL')}`,tone:'ok'}
+}
+function debtEndLabel(months){
+ if(!Number.isFinite(months)||months>=600)return'לא ניתן לחשב';
+ const d=new Date();d.setDate(1);d.setMonth(d.getMonth()+months);
+ return d.toLocaleDateString('he-IL',{month:'long',year:'numeric'})
+}
+function debtPortfolio(){
+ const accountDebts=db.accounts.filter(a=>a.type==='liability');
+ const standalone=db.debts.filter(d=>!accountDebts.some(a=>(a.name||'').trim()===(d.name||'').trim()));
+ const items=[
+  ...accountDebts.map(d=>({...d,_source:'account'})),
+  ...standalone.map(d=>({...d,_source:'debt'}))
+ ];
+ const total=items.reduce((s,d)=>s+(+d.balance||0),0);
+ const monthly=items.reduce((s,d)=>s+(+d.payment||0),0);
+ const weightedInterest=total?items.reduce((s,d)=>s+(+d.balance||0)*(+d.interest||0),0)/total:0;
+ const longest=items.reduce((max,d)=>Math.max(max,debtCalc(d,0).months),0);
+ return{items,total,monthly,weightedInterest,longest}
+}
+function wealth(){
+ heading('הון עצמי','תמונה מסודרת של הנכסים וההתחייבויות - ללא ארנקים דיגיטליים');
+ const assets=db.accounts.filter(a=>a.type==='asset'),liabs=db.accounts.filter(a=>a.type==='liability'),net=liveAssets()-liveLiabilities(),liquid=assets.filter(a=>a.liquid).reduce((s,a)=>s+effectiveBalance(a),0);
+ const liquidAssets=assets.filter(a=>a.liquid),longTerm=assets.filter(a=>!a.liquid&&a.subtype!=='property'),property=assets.filter(a=>!a.liquid&&a.subtype==='property');
+ const group=(title,subtitle,rows,kind='asset')=>`<section class="wealth-panel ${kind==='liability'?'wealth-panel-liability':''}"><div class="wealth-panel-head"><div><span class="wealth-panel-icon">${kind==='liability'?'↘':'◇'}</span><div><h3>${title}</h3><small>${subtitle}</small></div></div><strong class="${kind==='liability'?'down':'up'}">${money(rows.reduce((s,a)=>s+(kind==='liability'?(+a.balance||0):effectiveBalance(a)),0))}</strong></div><div class="account-table">${rows.map(accountRow).join('')||`<div class="wealth-empty-state"><span>＋</span><p>${kind==='liability'?'אין התחייבויות רשומות':'אין פריטים בקבוצה הזו'}</p></div>`}</div></section>`;
+ $('#view').innerHTML=`<div class="grid stats maturity-stats wealth-summary-pro"><div class="card hero-card stat wealth-net-card"><small>הון נקי</small><strong>${money(net)}</strong><span class="trend">סך הנכסים פחות כל ההתחייבויות</span></div><div class="card stat"><small>סך הנכסים</small><strong class="up">${money(liveAssets())}</strong><span class="trend">${assets.length} נכסים וחשבונות</span></div><div class="card stat"><small>מתוכם נזילים</small><strong class="up">${money(liquid)}</strong><span class="trend">כסף שזמין לשימוש</span></div><div class="card stat wealth-liability-stat"><small>סך ההתחייבויות</small><strong class="down">${money(liveLiabilities())}</strong><span class="trend">${liabs.length?`${liabs.length} התחייבויות רשומות`:'אין התחייבויות רשומות'}</span></div></div><section class="wealth-workspace section-space"><div class="wealth-workspace-head"><div><span class="section-kicker">מפת ההון שלי</span><h2>נכסים והתחייבויות</h2><p>הכול מחולק לפי זמינות וסוג, כדי להבין במהירות איפה הכסף נמצא.</p></div><button class="primary" data-action="addAccount">＋ חשבון או נכס</button></div><div class="wealth-groups-grid">${group('נכסים נזילים','עו״ש, מזומן וכסף זמין',liquidAssets)}${group('חיסכון והשקעות','הון לטווח בינוני וארוך',longTerm)}${group('רכוש','רכב, נדל״ן ונכסים מוחשיים',property)}${group('התחייבויות','הלוואות וחובות',liabs,'liability')}</div></section>`
+}
+function wallets(){
+ heading('ארנקים וכרטיסים דיגיטליים','זהות ברורה לכל ארנק והתראה לפני שכסף פג תוקף');
+ const expiring=db.wallets.map(w=>({w,meta:walletExpiryMeta(w)})).filter(x=>x.w.walletType==='gift'&&x.meta&&x.meta.days<=90).sort((a,b)=>a.meta.days-b.meta.days);
+ const alert=expiring.length?`<section class="wallet-expiry-alert ${expiring[0].meta.days<0?'expired':''}"><span class="wallet-alert-icon">!</span><div><b>${expiring[0].meta.days<0?'כרטיס שדורש טיפול':'כסף שעומד לפוג'}</b><p>${esc(expiring[0].w.name||'Gift Card')} · ${expiring[0].meta.label} · יתרה ${money(expiring[0].w.balance)}</p></div><button class="ghost" data-action="editWallet" data-id="${expiring[0].w.id}">בדיקה</button></section>`:'';
+ $('#view').innerHTML=`<div class="grid two wallet-summary"><div class="card hero-card stat"><small>סה״כ בארנקים ובכרטיסים</small><strong>${money(walletTotal())}</strong><span class="trend">אינו נכלל בחישוב ההון העצמי</span></div><div class="card stat"><small>ארנקים וכרטיסים פעילים</small><strong>${db.wallets.length}</strong><span class="trend">${expiring.length?`${expiring.length} דורשים תשומת לב`:'אין תוקפים קרובים'}</span></div></div>${alert}<div class="card section-space wallet-directory"><div class="card-head"><div><h3>הארנקים שלי</h3><small class="muted">לכל סוג צבע משלו; אפשר לשנות בעריכה</small></div><button class="primary" data-action="addWallet">＋ הוספה</button></div><div class="wallet-grid">${db.wallets.length?db.wallets.map(w=>{let meta=walletExpiryMeta(w);return `<article class="wallet-card maturity-wallet-card" style="--wallet-color:${walletColor(w)}"><div class="wallet-logo">${walletInitial(w.walletType)}</div><div class="grow"><small>${walletTypeName(w.walletType)}</small><b>${esc(w.name||walletTypeName(w.walletType))}</b><strong>${money(w.balance)}</strong>${meta?`<span class="wallet-expiry ${meta.tone}">${meta.label}</span>`:''}</div><button class="mini-btn" data-action="editWallet" data-id="${w.id}">עריכה</button></article>`}).join(''):empty('◈','עוד אין ארנקים','הוסף Bit, פייבוקס או כרטיס דיגיטלי')}</div></div>`
+}
+function editWallet(w={}){
+ const defaultType=w.walletType||'bit',defaultColor=walletColor({...w,walletType:defaultType});
+ modal(w.id?'עריכת ארנק או כרטיס':'ארנק או כרטיס חדש',`<div class="form-grid"><label>סוג<select name="walletType" id="walletTypeField"><option value="bit" ${defaultType==='bit'?'selected':''}>Bit</option><option value="paybox" ${defaultType==='paybox'?'selected':''}>פייבוקס</option><option value="digital" ${defaultType==='digital'?'selected':''}>כרטיס דיגיטלי</option><option value="fighter" ${defaultType==='fighter'?'selected':''}>כרטיס אשראי פייטר</option><option value="gift" ${defaultType==='gift'?'selected':''}>Gift Card</option><option value="other" ${defaultType==='other'?'selected':''}>אחר</option></select></label><label>צבע הארנק<input name="color" id="walletColorField" type="color" value="${defaultColor}"></label><label>שם או תיאור<input name="name" value="${esc(w.name||'')}" placeholder="למשל: Gift Card לחנות"></label><label>יתרה נוכחית<input name="balance" type="number" step="0.01" value="${w.balance??''}" required></label><label class="full">תאריך תפוגה, אם יש<input name="expiryDate" type="date" value="${w.expiryDate||''}"><small class="form-help">שימושי במיוחד ל־Gift Card; HON יתריע לפני שהכסף פג.</small></label></div>${field.actions}${w.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,balance:+x.balance,color:x.color||walletPalette[x.walletType]||walletPalette.other,expiryDate:x.expiryDate||''};if(w.id)Object.assign(w,v);else db.wallets.push({...v,id:uid()});save('הארנק נשמר')});
+ $('#walletTypeField').onchange=e=>{$('#walletColorField').value=walletPalette[e.target.value]||walletPalette.other};
+ if(w.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק?')){db.wallets=db.wallets.filter(x=>x.id!==w.id);$('#modal').hidden=true;save('נמחק')}}
+}
+function debts(){
+ heading('תוכנית יציאה מחובות','כל ההתחייבויות במקום אחד, עם עדיפות ותאריך סיום');
+ const p=debtPortfolio(),priority=[...p.items].filter(d=>(+d.balance||0)>0).sort((a,b)=>(+b.interest||0)-(+a.interest||0))[0];
+ const priorityAlert=priority&&+priority.interest>0?`<section class="debt-priority"><span>!</span><div><b>עדיפות מומלצת: ${esc(priority.name)}</b><p>זה החוב עם הריבית הגבוהה ביותר (${numberAmount(priority.interest)}%). בדוק קודם אפשרות להגדיל בו את ההחזר בלי לפגוע בכרית הביטחון.</p></div></section>`:'';
+ const cards=p.items.map(d=>{let sim=debtCalc(d,0),fast=debtCalc(d,200),original=Math.max(+d.originalBalance||0,+d.balance||0),paid=Math.max(0,original-(+d.balance||0)),progress=original?Math.min(100,paid/original*100):0;return `<article class="card debt-card-pro"><div class="debt-card-accent"></div><div class="card-head"><div><small class="muted">${esc(d.lender|| (d._source==='account'?'מההון העצמי':'חוב עצמאי'))}</small><h3>${esc(d.name)}</h3></div><button class="mini-btn" data-action="${d._source==='account'?'editAccount':'editDebt'}" data-id="${d.id}">עריכה</button></div><div class="debt-balance-row"><div><small>יתרה לסגירה</small><strong class="debt-balance">${money(d.balance)}</strong></div><span>${numberAmount(progress)}% נסגר</span></div><div class="progress debt-progress"><i style="width:${progress}%"></i></div><div class="debt-facts"><div><small>חוב מקורי</small><b>${money(original)}</b></div><div><small>החזר חודשי</small><b>${d.payment?money(d.payment):'לא הוגדר'}</b></div><div><small>ריבית שנתית</small><b>${d.interest!=null?numberAmount(d.interest)+'%':'לא הוגדרה'}</b></div><div><small>סיום משוער</small><b>${debtEndLabel(sim.months)}</b></div></div>${d.payment?`<div class="debt-simulation"><b>מה יקרה עם עוד 200 ₪ בחודש?</b><span>כ־${Math.max(0,sim.months-fast.months)} חודשים פחות · חיסכון משוער של ${money(Math.max(0,sim.interest-fast.interest))} בריבית</span></div>`:'<div class="debt-simulation muted">הגדר החזר חודשי כדי לקבל תחזית סיום.</div>'}</article>`}).join('');
+ $('#view').innerHTML=`<div class="grid stats maturity-stats debt-stats"><div class="card hero-card stat"><small>יתרת חובות כוללת</small><strong>${money(p.total)}</strong></div><div class="card stat"><small>החזר חודשי כולל</small><strong>${money(p.monthly)}</strong></div><div class="card stat"><small>ריבית משוקללת</small><strong>${numberAmount(p.weightedInterest)}%</strong></div><div class="card stat"><small>יעד יציאה משוער</small><strong class="date-value">${p.items.length?debtEndLabel(p.longest):'אין חובות'}</strong></div></div>${priorityAlert}<div class="toolbar section-space"><button class="primary" data-action="addDebt">＋ הוספת חוב מפורט</button></div><div class="grid two debt-grid">${cards||empty('↘','אין חובות רשומים','הוסף התחייבות בהון העצמי')}</div>`
+}
+function editAccount(a={}){
+ modal(a.id?'עריכת חשבון':'חשבון חדש',`<div class="form-grid"><label>שם החשבון<input name="name" value="${esc(a.name||'')}" required></label><label>סוג<select name="type" id="accountType"><option value="asset" ${a.type!=='liability'?'selected':''}>נכס</option><option value="liability" ${a.type==='liability'?'selected':''}>התחייבות</option></select></label><label>סוג החשבון<select name="subtype"><option value="bank" ${a.subtype==='bank'?'selected':''}>חשבון בנק</option><option value="cash" ${a.subtype==='cash'?'selected':''}>מזומן</option><option value="pension" ${a.subtype==='pension'?'selected':''}>פנסיה / גמל</option><option value="investment" ${a.subtype==='investment'?'selected':''}>השקעה</option><option value="property" ${a.subtype==='property'?'selected':''}>רכב / נדל״ן</option><option value="other" ${a.subtype==='other'?'selected':''}>אחר</option></select></label><label>יתרה נוכחית<input name="balance" type="number" step="0.01" value="${a.type==='asset'?effectiveBalance(a):a.balance??''}" required></label><label class="debt-field">החוב המקורי<input name="originalBalance" type="number" min="0" step="0.01" value="${a.originalBalance||''}"></label><label class="debt-field">הגוף המלווה<input name="lender" value="${esc(a.lender||'')}" placeholder="למשל: בנק או חברת אשראי"></label><label class="debt-field">ריבית שנתית %<input name="interest" type="number" min="0" step="0.01" value="${a.interest??''}"></label><label class="debt-field">החזר חודשי<input name="payment" type="number" min="0" step="0.01" value="${a.payment??''}"></label><label class="check full asset-liquid-field"><input name="liquid" type="checkbox" ${a.liquid?'checked':''}> הנכס נזיל וזמין לשימוש</label></div>${field.actions}${a.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,balance:+x.balance,originalBalance:+x.originalBalance||+x.balance,interest:x.interest===''?null:+x.interest,payment:x.payment===''?null:+x.payment,lender:x.lender||'',liquid:x.liquid==='on',balanceAsOf:new Date().toISOString()};if(v.type==='liability')v.liquid=false;if(a.id)Object.assign(a,v);else db.accounts.push({...v,id:uid()});save('החשבון נשמר')});
+ const syncType=()=>{$$('.debt-field').forEach(el=>el.hidden=$('#accountType').value!=='liability');$('.asset-liquid-field').hidden=$('#accountType').value==='liability'};$('#accountType').onchange=syncType;syncType();
+ if(a.id)$('#deleteInside').onclick=()=>{if(confirm('למחוק את החשבון?')){db.accounts=db.accounts.filter(x=>x.id!==a.id);$('#modal').hidden=true;save('החשבון נמחק')}}
+}
+function editDebt(d={}){
+ modal(d.id?'עריכת חוב':'חוב חדש',`<div class="form-grid"><label>שם החוב<input name="name" value="${esc(d.name||'')}" required></label><label>הגוף המלווה<input name="lender" value="${esc(d.lender||'')}" placeholder="למשל: בנק, חברת אשראי או משפחה"></label><label>יתרה נוכחית<input name="balance" type="number" min="0" step="0.01" value="${d.balance||''}" required></label><label>החוב המקורי<input name="originalBalance" type="number" min="0" step="0.01" value="${d.originalBalance||d.balance||''}"></label><label>ריבית שנתית באחוזים<input name="interest" type="number" min="0" step="0.01" value="${d.interest||0}"></label><label>החזר חודשי<input name="payment" type="number" min="1" step="0.01" value="${d.payment||''}" required></label></div>${field.actions}${d.id?'<button type="button" class="danger" id="deleteInside">מחיקה</button>':''}`,x=>{let v={...x,balance:+x.balance,originalBalance:+x.originalBalance||+x.balance,interest:+x.interest,payment:+x.payment,lender:x.lender||''};if(d.id)Object.assign(d,v);else db.debts.push({...v,id:uid()});save('החוב נשמר')});
+ if(d.id)$('#deleteInside').onclick=()=>{db.debts=db.debts.filter(x=>x.id!==d.id);$('#modal').hidden=true;save('החוב נמחק')}
+}
+function review(){
+ heading('סגירת חודש','תהליך קצר שמוודא, מסכם ומייצר החלטה לחודש הבא');
+ const t=totals(selectedMonth),f=forecast(selectedMonth),existing=db.reviews.find(r=>r.month===selectedMonth)||{},monthRows=[...monthTx(selectedMonth)].sort((a,b)=>(b.date||'').localeCompare(a.date||'')),unreviewed=monthRows.filter(t=>!t.reviewed),advice=professionalInsights(selectedMonth);
+ const steps=['תמונת מצב','אימות תנועות','תובנות','החלטה'];
+ const stepper=`${monthPicker()}<div class="review-stepper">${steps.map((x,i)=>`<button type="button" data-review-step="${i+1}" class="${reviewStep===i+1?'active':''} ${reviewStep>i+1||reviewStep===5?'done':''}"><span>${reviewStep>i+1||reviewStep===5?'✓':i+1}</span><b>${x}</b></button>`).join('')}</div>`;
+ let body='';
+ if(reviewStep===1)body=`<section class="review-stage"><div class="review-stage-head"><span>1</span><div><small>מתחילים במספרים</small><h2>${monthName(selectedMonth)} במבט אחד</h2><p>התמונה הזו מבוססת רק על התנועות שנרשמו בפועל.</p></div></div><div class="grid three review-kpis"><div class="card stat"><small>הכנסות</small><strong class="up">${money(t.income)}</strong></div><div class="card stat"><small>כל מה שיצא</small><strong class="down">${money(t.expense+t.saving+t.debt)}</strong></div><div class="card ${t.income-(t.expense+t.saving+t.debt)<0?'warning-card':'hero-card'} stat"><small>מאזן בפועל</small><strong dir="ltr">${signedMoney(t.income-t.expense-t.saving-t.debt)}</strong></div></div><div class="review-stage-actions"><span>${unreviewed.length?`${unreviewed.length} תנועות עדיין מחכות לבדיקה`:'כל התנועות כבר מסומנות כבדוקות'}</span><button class="primary" data-review-step="2">להמשך: אימות תנועות ←</button></div></section>`;
+ if(reviewStep===2)body=`<section class="review-stage"><div class="review-stage-head"><span>2</span><div><small>מוודאים שהבסיס נכון</small><h2>אימות תנועות</h2><p>בדוק סכומים, קטגוריות וחשבונות לפני הסיכום.</p></div></div><div class="card review-transactions"><div class="card-head"><div><h3>${unreviewed.length?'תנועות שמחכות לבדיקה':'הכול מאומת'}</h3><small class="muted">${monthRows.length} תנועות בחודש</small></div>${unreviewed.length?'<button class="ghost" type="button" id="reviewAllTx">אישור כולן</button>':''}</div>${unreviewed.length?unreviewed.map(x=>`<div class="review-tx-row"><div><b>${esc(x.note||cat(x.category).name)}</b><small>${new Date(x.date+'T12:00').toLocaleDateString('he-IL')} · ${esc(cat(x.category).name)}</small></div><strong class="${x.kind==='income'?'up':'down'}">${x.kind==='income'?money(x.amount):signedMoney(-x.amount)}</strong><button class="mini-btn" type="button" data-review-one="${x.id}">אישור</button></div>`).join(''):empty('✓','כל התנועות מאומתות','אפשר להמשיך לתובנות')}</div><div class="review-stage-actions"><button class="ghost" data-review-step="1">חזרה</button><button class="primary" data-review-step="3">להמשך: תובנות ←</button></div></section>`;
+ if(reviewStep===3)body=`<section class="review-stage"><div class="review-stage-head"><span>3</span><div><small>הופכים נתונים להבנה</small><h2>מה למדנו החודש?</h2><p>התובנות מדגישות חריגות ופעולות ברורות, בלי המלצות יומיות להוצאה קבועה.</p></div></div><div class="grid two review-insight-grid"><div class="card review-positive"><span class="review-insight-icon">↗</span><div><small>מבט קדימה</small><h3>${f.free>=0?'התחזית נשארת מאוזנת':'נדרש תיקון בתוכנית'}</h3><p>${f.free>=0?`אחרי ההוצאות והמטרות צפויים להישאר ${money(f.free)}.`:`לפי הנתונים צפוי חוסר של ${money(Math.abs(f.free))}.`}</p></div></div><div class="card"><div class="card-head"><h3>המלצות ממוקדות</h3><span class="badge">${advice.length}</span></div>${advice.slice(0,3).map(x=>`<div class="review-advice ${x.level}"><b>${esc(x.title)}</b><p>${esc(x.text)}</p><small>${esc(x.action)}</small></div>`).join('')}</div></div><div class="review-stage-actions"><button class="ghost" data-review-step="2">חזרה</button><button class="primary" data-review-step="4">להמשך: החלטה ←</button></div></section>`;
+ if(reviewStep===4)body=`<section class="review-stage"><div class="review-stage-head"><span>4</span><div><small>מסיימים עם פעולה אחת</small><h2>הפקת לקחים</h2><p>שמור מסקנה קצרה שתהיה שימושית גם בחודש הבא.</p></div></div><form id="reviewForm" class="card review-reflection form-grid"><label class="full">הניצחון של החודש<textarea name="win" rows="2" placeholder="מה עבד טוב?">${esc(existing.win||'')}</textarea></label><label class="full">מה הפתיע או לא עבד?<textarea name="improve" rows="2" placeholder="מה כדאי לשנות?">${esc(existing.improve||'')}</textarea></label><label class="full">מה למדנו על ההתנהלות שלנו?<textarea name="lesson" rows="2">${esc(existing.lesson||'')}</textarea></label><label class="full">החלטה אחת לחודש הבא<textarea name="decision" rows="2" placeholder="פעולה אחת ברורה">${esc(existing.decision||'')}</textarea></label><div class="review-form-actions full"><button type="button" class="ghost" data-review-step="3">חזרה</button><button class="primary">סגירת החודש ושמירת הלקחים</button></div></form></section>`;
+ if(reviewStep===5)body=`<section class="review-complete card"><span>✓</span><small>החודש נסגר בהצלחה</small><h2>${monthName(selectedMonth)} מתועד ומסודר</h2><p>התנועות אומתו, צילום ההון נשמר והלקחים יחכו לך בהמשך.</p><div><button class="ghost" data-review-step="1">צפייה מחדש</button><button class="primary" data-page="dashboard">חזרה לסקירה</button></div></section>`;
+ $('#view').innerHTML=stepper+body;
+ $$('[data-review-step]').forEach(b=>b.onclick=()=>{reviewStep=+b.dataset.reviewStep;render()});
+ $$('[data-review-one]').forEach(b=>b.onclick=()=>{let tx=db.transactions.find(x=>x.id===b.dataset.reviewOne);if(tx)tx.reviewed=true;persist();render()});
+ if($('#reviewAllTx'))$('#reviewAllTx').onclick=()=>{monthRows.forEach(x=>x.reviewed=true);persist();render()};
+ if($('#reviewForm'))$('#reviewForm').onsubmit=e=>{e.preventDefault();let x=Object.fromEntries(new FormData(e.target));db.reviews=db.reviews.filter(r=>r.month!==selectedMonth);db.reviews.push({...x,month:selectedMonth,closedAt:new Date().toISOString()});monthRows.forEach(x=>x.reviewed=true);actions.snapshot(null,false);reviewStep=5;save('החודש נסגר והלקחים נשמרו')}
+}
+function decorateSmartUi(){
+ if(current==='goals'&&window.innerWidth>720){$('.goal-stats')?.classList.add('maturity-goal-stats');$('.goals-command')?.classList.add('maturity-goals-command')}
+ if(current==='settings')$$('#categorySorter [data-cat-id]').forEach(row=>{let c=db.categories.find(x=>x.id===row.dataset.catId),meta=row.querySelector('small');if(c?.kind==='expense'&&meta&&!meta.dataset.behavior){meta.dataset.behavior='1';meta.textContent+=` · ${categoryBehaviorLabel(c)}`}});
+ if(current==='reports'){
+  let panel=$('.insights-panel'),title=panel?.querySelector('.card-head h3'),subtitle=panel?.querySelector('.card-head small');if(title)title.textContent='ניתוח תקציבי חכם';if(subtitle)subtitle.textContent='קבועות נבדקות כתשלום; גמישות לפי קצב';
+  $$('.analysis-card>div>b').forEach(x=>x.textContent='הפעולה המומלצת:')
+ }
+}
+function importData(e){let r=new FileReader;r.onload=()=>{try{db=migrate(JSON.parse(r.result));persist();render();toast('הגיבוי שוחזר ושודרג ל־HON v17')}catch{alert('קובץ הגיבוי אינו תקין')}};r.readAsText(e.target.files[0])}
+function importCsv(e){let r=new FileReader;r.onload=()=>{try{let lines=r.result.replace(/^\ufeff/,'').split(/\r?\n/).filter(Boolean),head=parseCsv(lines.shift()).map(x=>x.toLowerCase()),count=0;for(let line of lines){let v=parseCsv(line),o=Object.fromEntries(head.map((h,i)=>[h,v[i]||'']));if(!o.date||!o.amount)continue;let c=db.categories.find(x=>x.name===o.category);if(!c&&o.category){c={id:uid(),name:o.category,kind:o.kind==='income'?'income':'expense',color:'#718096'};db.categories.push(c)}db.transactions.push({id:uid(),date:o.date.slice(0,10),kind:o.kind||'expense',amount:+o.amount,category:c?.id,note:o.note||'',reviewed:false});count++}save(`${count} תנועות יובאו`)}catch{alert('לא הצלחנו לקרוא את הקובץ')}};r.readAsText(e.target.files[0])}
+function parseCsv(line){let out=[],cur='',q=false;for(let i=0;i<line.length;i++){let c=line[i];if(c==='"'&&line[i+1]==='"'){cur+='"';i++}else if(c==='"')q=!q;else if(c===','&&!q){out.push(cur);cur=''}else cur+=c}out.push(cur);return out}
+function toast(s){let t=$('#toast');t.textContent=s;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2400)}
+
+document.querySelectorAll('[data-close]').forEach(x=>x.onclick=()=>$('#modal').hidden=true);
+function applyTheme(isDark){document.documentElement.classList.toggle('dark',isDark);localStorage.setItem('honTheme',isDark?'dark':'light');if($('#themeBtn')){$('#themeBtn').textContent=isDark?'☀':'☾';$('#themeBtn').title=isDark?'מצב בהיר':'מצב כהה'}}
+function toggleTheme(){applyTheme(!document.documentElement.classList.contains('dark'))}
+applyTheme(localStorage.getItem('honTheme')==='dark');
+$('#themeBtn').onclick=toggleTheme;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;$('#install').hidden=false});
+$('#install').onclick=async()=>{deferredInstall?.prompt();deferredInstall=null;$('#install').hidden=true};
+if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
+window.HONGetData=()=>structuredClone(db);
+window.HONApplyCloud=(payload,updatedAt)=>{let clean=structuredClone(payload||{});Object.keys(clean).filter(key=>key.startsWith('_honSync')).forEach(key=>delete clean[key]);db=migrate(clean);localStorage.setItem('honSheli',JSON.stringify(db));render();toast('הנתונים עודכנו מהענן')};
+persist(false);render();window.HONCloud?.init();
