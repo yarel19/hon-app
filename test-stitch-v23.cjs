@@ -29,9 +29,11 @@ const seed={
  categories:[
   {id:'salary',name:'משכורת',kind:'income',color:'#159A75'},
   {id:'food',name:'מזון וקניות',kind:'expense',color:'#3B6FD8'},
+  {id:'housing',name:'דיור',kind:'expense',color:'#E28C2D'},
+  {id:'health',name:'בריאות',kind:'expense',color:'#D95763'},
   {id:'saving',name:'חיסכון והשקעה',kind:'saving',color:'#159A75'}
  ],
- budgets:[{month,category:'food',amount:2000}],
+ budgets:[{month,category:'food',amount:2000},{month,category:'housing',amount:3000},{month,category:'health',amount:500}],
  monthPlans:[{month,income:13000}],
  ironBudget:{income:13000,categories:[{category:'food',amount:2000}]},
  goals:[{id:'g1',name:'בר מצווה',target:20000,current:5000,startMonth:month,deadlineMonth:'2029-07',date:'2029-07-01',term:'long',calculationMode:'auto',moneyLocation:'פיקדון'}],
@@ -78,6 +80,8 @@ assert(d.documentElement.classList.contains('stitch-ui-ready'),'שכבת Stitch 
 assert(d.querySelector('.stitch-mobile-brandmark')?.textContent==='H','האייקון הקודם לא הוחזר');
 assert(d.querySelector('.stitch-overview-heading')?.textContent.includes('משפחת כברה'),'הכותרת המשפחתית בסקירה חסרה');
 assert(d.querySelector('.stitch-overview-heading')?.textContent.includes('שלכם'),'הפנייה למשפחה אינה מנוסחת נכון');
+assert(!d.body.textContent.includes('הסקירה שלך'),'הכותרת הקטנה המיותרת עדיין מוצגת');
+assert(theme.includes('text-align:center!important'),'כותרת הסקירה אינה ממורכזת');
 assert(!d.querySelector('.stitch-overview-brandmark'),'אייקון H כפול עדיין מוצג במחשב');
 assert(d.querySelector('.stitch-net-hero'),'כרטיס ההון של Stitch חסר');
 assert(d.querySelectorAll('.stitch-balance-icon').length===2,'אייקוני יתרות העו״ש והמזומן חסרים');
@@ -95,13 +99,19 @@ assert(d.querySelectorAll('#mobileNav .stitch-mobile-nav-btn').length===5,'ני�
 
 visit('cashflow');
 assert(d.querySelector('.stitch-forecast'),'תחזית Stitch חסרה');
+assert(d.querySelectorAll('.stitch-forecast-factor').length===3,'רכיבי החישוב בתחזית אינם מסודרים');
+assert(d.querySelector('.stitch-forecast-answer'),'תוצאת התחזית חסרה');
+assert(d.querySelector('.stitch-budget-toolbar-v23'),'סרגל כלי התקציב החדש חסר');
 assert(d.querySelector('.stitch-budget-card'),'קטגוריות התקציב חסרות');
 d.querySelector('[data-flow-tab="transactions"]').click();
 assert(d.querySelector('.stitch-transactions-card'),'רשימת התנועות חסרה');
+assert(d.querySelector('.stitch-activity-row.detailed'),'שורת תנועה מקצועית ומפורטת חסרה');
+assert(d.querySelector('.stitch-tx-account'),'עמודת החשבון בתנועות חסרה');
 assert(d.body.textContent.includes('סופר-פארם'),'תנועה קיימת לא מוצגת');
 
 visit('wealth');
 assert(d.querySelector('.stitch-wealth-bento'),'סיכום ההון חסר');
+assert(!d.querySelector('.stitch-wealth-chart-card'),'מגמת ההון העצמי המיותרת עדיין מוצגת');
 assert(d.body.textContent.includes('פנסיה'),'נכס קיים לא מוצג');
 assert(d.body.textContent.includes('הלוואה'),'התחייבות קיימת לא מוצגת');
 
@@ -111,6 +121,9 @@ assert(d.querySelectorAll('.stitch-wallet-card').length===2,'הארנקים הק
 visit('goals');
 assert(d.querySelector('.stitch-goal-card'),'מטרה קיימת לא מוצגת');
 assert(d.body.textContent.includes('בר מצווה'),'שם המטרה הקיימת לא מוצג');
+assert(d.querySelector('.stitch-goal-years'),'תוכנית החיסכון השנתית חסרה');
+assert(d.querySelectorAll('.stitch-goal-year-card').length>=2,'אין פירוט חיסכון על פני השנים');
+assert(d.querySelector('.stitch-goal-year-parts')?.textContent.includes('בר מצווה'),'הרכב החיסכון השנתי חסר');
 
 visit('debts');
 assert(d.querySelector('.stitch-debt-card'),'חוב מההון העצמי לא מוצג');
@@ -134,6 +147,12 @@ const beforeAdd=dom.window.HONGetData().transactions.length;
 d.querySelector('[data-action="addTx"]').click();
 const txForm=d.querySelector('#form');
 assert(txForm&&!d.querySelector('#modal').hidden,'חלון הוספת תנועה לא נפתח');
+const accountOptions=[...txForm.elements.account.options];
+assert(accountOptions.length===2,'הוצאה חדשה כוללת יותר מעו״ש ומזומן');
+assert(accountOptions.map(x=>x.textContent).join('|')==='עו״ש|מזומן','שמות מקורות התנועה אינם עו״ש ומזומן');
+assert(txForm.elements.account.value==='bank','עו״ש אינו ברירת המחדל');
+const categoryLabels=[...txForm.elements.category.options].map(x=>x.textContent);
+assert(categoryLabels.join('|')===[...categoryLabels].sort((a,b)=>a.localeCompare(b,'he')).join('|'),'קטגוריות ההוצאה אינן ממוינות לפי א׳-ב׳');
 txForm.elements.kind.value='expense';
 txForm.elements.amount.value='25.50';
 txForm.elements.date.value=`${month}-09`;
@@ -145,6 +164,7 @@ const afterAdd=dom.window.HONGetData();
 assert(afterAdd.transactions.length===beforeAdd+1,'הוספת תנועה לא נשמרה');
 assert(afterAdd.transactions.some(x=>x.note==='בדיקת פעולה'&&x.amount===25.5),'פרטי התנועה החדשה לא נשמרו');
 
+assert(!/[—–]/.test(app+stitch+html),'נשאר מקף ארוך בטקסט האפליקציה');
 assert(errors.length===0,`שגיאות דפדפן: ${errors.join('; ')}`);
 
-console.log('HON Stitch v22 passed luxury palette, overview hierarchy, all screens, existing-data preservation, editing, dark-mode styling, and mobile navigation checks.');
+console.log('HON Stitch v23 passed transaction defaults, alphabetical categories, refined forecast, detailed rows, yearly goal planning, existing-data preservation, and mobile navigation checks.');
