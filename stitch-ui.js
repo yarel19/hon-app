@@ -1,4 +1,4 @@
-/* HON Stitch UI v28
+/* HON Stitch UI v29
  * Visual layer based on the user's exported Google Stitch screens.
  * The data model, persistence and Supabase synchronization remain in app.js/cloud.js.
  */
@@ -116,7 +116,7 @@ dashboard=function(){
     </article>
     <section class="stitch-activity-section"><div class="stitch-section-title"><h2>פעילות אחרונה</h2><div class="stitch-section-actions"><button type="button" class="stitch-section-link" data-page="cashflow">כל הפעולות ${stitchIcon('chevron_left')}</button><button type="button" class="stitch-add-circle" data-action="addTx" aria-label="הוספת תנועה">${stitchIcon('add')}</button></div></div><div class="stitch-activity-card">${recent.length?recent.map(x=>stitchTxRow(x)).join(''):empty('＋','מתחילים מכאן','הוסף תנועה ראשונה')}</div></section>
    </div>
-   <aside class="stitch-dashboard-rail">
+   <div class="stitch-dashboard-rail" role="complementary" aria-label="יתרות, המלצות וארנקים">
     <div class="stitch-balance-grid">
      <button type="button" class="stitch-balance-card bank" data-action="correctBank"><span class="stitch-balance-icon">${stitchIcon('account_balance')}</span><span class="stitch-balance-copy"><small>עו״ש עכשיו</small><strong dir="ltr">${money(bankNow)}</strong><span class="stitch-balance-monthly"><span><small>בתחילת ${openingMonth}</small><b dir="ltr">${money(bankOpening)}</b></span>${stitchMonthlyBalanceDelta(bankDelta)}</span></span><span class="stitch-balance-edit" aria-hidden="true">${stitchIcon('edit')}</span></button>
      <button type="button" class="stitch-balance-card cash" data-action="correctCash"><span class="stitch-balance-icon">${stitchIcon('payments')}</span><span class="stitch-balance-copy"><small>מזומן נגיש</small><strong dir="ltr">${money(cashNow)}</strong><span class="stitch-balance-monthly"><span><small>בתחילת ${openingMonth}</small><b dir="ltr">${money(cashOpening)}</b></span>${stitchMonthlyBalanceDelta(cashDelta)}</span></span><span class="stitch-balance-edit" aria-hidden="true">${stitchIcon('edit')}</span></button>
@@ -124,7 +124,7 @@ dashboard=function(){
     </div>
     <section class="stitch-advice-section">${stitchSectionTitle('הצעות ייעול') }<div class="stitch-advice-grid">${adviceHtml||'<p class="muted">לאחר הוספת תנועות יוצגו כאן המלצות.</p>'}</div></section>
     <section class="stitch-wallet-section">${stitchSectionTitle('ארנקים דיגיטליים','נהל הכל','wallets')}<div class="stitch-wallet-compact-list">${walletHtml||'<p class="muted">עוד לא נוספו ארנקים.</p>'}</div></section>
-   </aside>
+   </div>
   </div>
  </section>`;
  stitchBindCommon()
