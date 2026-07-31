@@ -1,4 +1,4 @@
-/* HON Stitch UI v29
+/* HON Stitch UI v30
  * Visual layer based on the user's exported Google Stitch screens.
  * The data model, persistence and Supabase synchronization remain in app.js/cloud.js.
  */
@@ -91,6 +91,28 @@ openMobilePages=function(){
 
 function stitchBindCommon(){
  $$('[data-sync-now]').forEach(b=>b.onclick=()=>{window.HONCloud?.syncNow?.();toast('בודק עדכונים…')});
+}
+
+function stitchMonthlyTargets(month=selectedMonth){
+ ensureMonthBudget(month);
+ let expenseCategories=db.categories.filter(c=>c.kind==='expense');
+ let income=roundBudgetAmount(planFor(month).income);
+ let expenses=roundBudgetAmount(expenseCategories.reduce((sum,c)=>sum+budgetFor(month,c.id),0));
+ let savings=roundBudgetAmount(goalMonthlyTotal(month));
+ let debts=roundBudgetAmount(debtPortfolio().monthly);
+ let out=roundBudgetAmount(expenses+savings+debts);
+ return{income,expenses,savings,debts,out,balance:roundBudgetAmount(income-out),hasIncome:income>0,hasOut:out>0,hasPlan:income>0||out>0}
+}
+function stitchTargetComparison(actual,target,kind,defined=true){
+ actual=roundBudgetAmount(actual);target=roundBudgetAmount(target);
+ if(!defined)return'<span class="stitch-target-compare neutral"><b>לא הוגדר יעד לחודש</b></span>';
+ let difference=roundBudgetAmount(actual-target),exact=Math.abs(difference)<.009,good=kind==='out'?difference<=.009:difference>=-.009,label;
+ if(exact)label='בדיוק לפי היעד';
+ else if(kind==='income')label=difference>0?`מעל יעד ההכנסה ב-${money(difference)}`:`מתחת ליעד ההכנסה ב-${money(Math.abs(difference))}`;
+ else if(kind==='out')label=difference>0?`חריגה של ${money(difference)} מהמסגרת`:`נשארו ${money(Math.abs(difference))} במסגרת`;
+ else label=difference>0?`מעל תוכנית המאזן ב-${money(difference)}`:`מתחת לתוכנית המאזן ב-${money(Math.abs(difference))}`;
+ let ratio=kind==='balance'||Math.abs(target)<.009?`יעד ${kind==='balance'?signedMoney(target):money(target)}`:`${numberAmount(Math.round(actual/target*1000)/10)}% מהיעד`;
+ return `<span class="stitch-target-compare ${exact?'exact':good?'good':'bad'}"><b>${label}</b><em>${ratio}</em></span>`
 }
 
 dashboard=function(){
@@ -243,12 +265,12 @@ function stitchFilterTransactions(){
 
 cashflow=function(){
  heading('תקציב ותזרים','תקציב, תחזית ותנועות במקום אחד');
- let t=totals(selectedMonth),out=t.expense+t.saving+t.debt,balance=t.income-out;
+ let t=totals(selectedMonth),out=t.expense+t.saving+t.debt,balance=t.income-out,targets=stitchMonthlyTargets(selectedMonth);
  $('#view').innerHTML=`<section class="stitch-page">
   ${stitchMobileHeader('תקציב ותזרים')}
   <section class="stitch-cashflow-command">
    <header class="stitch-cashflow-command-head"><div class="stitch-cashflow-command-copy"><span>מרכז התקציב החודשי</span><h1>ניהול תקציב</h1><p>כל הנתונים החשובים של החודש, במקום אחד.</p></div><div class="stitch-cashflow-command-tools"><div class="stitch-month-switch"><button type="button" data-month="-1" aria-label="החודש הקודם">${stitchIcon('chevron_right')}</button><b>${monthName(selectedMonth)}</b><button type="button" data-month="1" aria-label="החודש הבא">${stitchIcon('chevron_left')}</button></div><button class="stitch-sync" type="button" data-sync-now title="סנכרון">${stitchIcon('sync')}</button></div></header>
-   <div class="stitch-cashflow-kpis"><article class="income"><small>הכנסות בפועל</small><strong dir="ltr">${money(t.income)}</strong></article><article class="out"><small>יצא בפועל</small><strong dir="ltr">${money(out)}</strong></article><article class="balance ${balance<0?'negative':''}"><small>יתרה לניהול</small><strong dir="ltr">${signedMoney(balance)}</strong></article></div>
+   <div class="stitch-cashflow-kpis"><article class="income"><small>הכנסות בפועל</small><strong dir="ltr">${money(t.income)}</strong>${stitchTargetComparison(t.income,targets.income,'income',targets.hasIncome)}</article><article class="out"><small>יצא בפועל</small><strong dir="ltr">${money(out)}</strong>${stitchTargetComparison(out,targets.out,'out',targets.hasOut)}</article><article class="balance ${balance<0?'negative':''}"><small>יתרה לניהול</small><strong dir="ltr">${signedMoney(balance)}</strong>${stitchTargetComparison(balance,targets.balance,'balance',targets.hasPlan)}</article></div>
    <div class="stitch-tabs"><button type="button" class="${flowView==='forecast'?'active':''}" data-flow-tab="forecast">תקציב ותחזית</button><button type="button" class="${flowView==='transactions'?'active':''}" data-flow-tab="transactions">תנועות</button></div>
   </section>
   ${flowView==='forecast'?stitchForecastView():stitchTransactionsView()}
@@ -415,8 +437,8 @@ monthlyHistory=function(){
 
 review=function(){
  heading('סגירת חודש','אימות, תובנות והחלטה אחת לחודש הבא');
- let t=totals(selectedMonth),f=forecast(selectedMonth),rows=[...monthTx(selectedMonth)].sort((a,b)=>(b.date||'').localeCompare(a.date||'')),unreviewed=rows.filter(x=>!x.reviewed),existing=db.reviews.find(r=>r.month===selectedMonth)||{},advice=professionalInsights(selectedMonth),steps=['סיכום פיננסי','אימות עסקאות','תובנות','רפלקציה'],body='';
- if(reviewStep===1)body=`<article class="stitch-review-card"><h2>סיכום פיננסי</h2><p class="muted">התמונה מבוססת על התנועות שנרשמו בפועל בחודש ${monthName(selectedMonth)}.</p><div class="stitch-review-kpis"><div><small>הכנסות</small><strong class="up">${money(t.income)}</strong></div><div><small>כל מה שיצא</small><strong>${money(t.expense+t.saving+t.debt)}</strong></div><div><small>מאזן בפועל</small><strong dir="ltr">${signedMoney(t.income-t.expense-t.saving-t.debt)}</strong></div></div><div class="stitch-review-actions"><button type="button" class="primary" data-review-step="2">להמשך: אימות עסקאות</button></div></article>`;
+ let t=totals(selectedMonth),f=forecast(selectedMonth),rows=[...monthTx(selectedMonth)].sort((a,b)=>(b.date||'').localeCompare(a.date||'')),unreviewed=rows.filter(x=>!x.reviewed),existing=db.reviews.find(r=>r.month===selectedMonth)||{},advice=professionalInsights(selectedMonth),steps=['סיכום פיננסי','אימות עסקאות','תובנות','רפלקציה'],body='',targets=stitchMonthlyTargets(selectedMonth),actualOut=t.expense+t.saving+t.debt,actualBalance=t.income-actualOut;
+ if(reviewStep===1)body=`<article class="stitch-review-card"><h2>סיכום פיננסי מול היעדים</h2><p class="muted">התמונה מבוססת על התנועות שנרשמו בפועל ועל היעדים שהוגדרו בתקציב ${monthName(selectedMonth)}.</p><div class="stitch-review-kpis"><div><small>הכנסות</small><strong class="up">${money(t.income)}</strong>${stitchTargetComparison(t.income,targets.income,'income',targets.hasIncome)}</div><div><small>כל מה שיצא</small><strong>${money(actualOut)}</strong>${stitchTargetComparison(actualOut,targets.out,'out',targets.hasOut)}</div><div><small>מאזן בפועל</small><strong dir="ltr">${signedMoney(actualBalance)}</strong>${stitchTargetComparison(actualBalance,targets.balance,'balance',targets.hasPlan)}</div></div><div class="stitch-review-actions"><button type="button" class="primary" data-review-step="2">להמשך: אימות עסקאות</button></div></article>`;
  if(reviewStep===2)body=`<article class="stitch-review-card"><div class="stitch-section-title"><div><h2>אימות עסקאות</h2><small class="muted">${unreviewed.length} עסקאות עדיין מחכות לאישור</small></div>${unreviewed.length?'<button type="button" class="ghost" id="reviewAllTx">אישור כולן</button>':''}</div><div class="stitch-review-list">${unreviewed.length?unreviewed.map(x=>stitchTxRow(x,true)).join(''):empty('done_all','הכול מאומת','אפשר לעבור לתובנות')}</div><div class="stitch-review-actions"><button type="button" class="ghost" data-review-step="1">חזרה</button><button type="button" class="primary" data-review-step="3">להמשך: תובנות</button></div></article>`;
  if(reviewStep===3)body=`<article class="stitch-review-card"><h2>תובנות והמלצות</h2><p class="muted">הנקודות המרכזיות שכדאי לקחת מהחודש הזה.</p><div class="stitch-review-insights"><div class="stitch-review-insight good"><h3>${f.free>=0?'התחזית נשארת מאוזנת':'נדרש תיקון בתוכנית'}</h3><p>${f.free>=0?`אחרי ההוצאות והמטרות צפויים להישאר ${money(f.free)}.`:`לפי הנתונים צפוי חוסר של ${money(Math.abs(f.free))}.`}</p></div>${advice.slice(0,3).map(x=>`<div class="stitch-review-insight"><h3>${esc(x.title)}</h3><p>${esc(x.action||x.text)}</p></div>`).join('')}</div><div class="stitch-review-actions"><button type="button" class="ghost" data-review-step="2">חזרה</button><button type="button" class="primary" data-review-step="4">להמשך: החלטה</button></div></article>`;
  if(reviewStep===4)body=`<article class="stitch-review-card"><h2>רפלקציה והחלטה</h2><p class="muted">סיים עם מסקנה קצרה שתהיה שימושית גם בחודש הבא.</p><form id="reviewForm" class="stitch-review-form"><label>הניצחון של החודש<textarea name="win" rows="2" placeholder="מה עבד טוב?">${esc(existing.win||'')}</textarea></label><label>מה הפתיע או לא עבד?<textarea name="improve" rows="2">${esc(existing.improve||'')}</textarea></label><label>מה למדנו על ההתנהלות שלנו?<textarea name="lesson" rows="2">${esc(existing.lesson||'')}</textarea></label><label>החלטה אחת לחודש הבא<textarea name="decision" rows="2" placeholder="פעולה אחת ברורה">${esc(existing.decision||'')}</textarea></label><div class="stitch-review-actions"><button type="button" class="ghost" data-review-step="3">חזרה</button><button class="primary">סגירת החודש ושמירה</button></div></form></article>`;

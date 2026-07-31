@@ -2811,6 +2811,36 @@ body.stitch-app>aside{
  .stitch-history-categories{padding:15px 12px}
 }
 
+/* HON v30 - actual results compared with the monthly plan */
+.stitch-target-compare{
+ display:flex!important;align-items:center;justify-content:flex-start;flex-wrap:wrap;gap:4px 7px;
+ width:max-content;max-width:100%;margin-top:8px;padding:5px 8px;border-radius:999px;
+ background:var(--st-low);color:var(--st-muted);line-height:1.25;text-align:right;
+}
+.stitch-target-compare b,.stitch-target-compare em{display:block;margin:0!important;font-style:normal;white-space:normal}
+.stitch-target-compare b{font-size:8px!important;font-weight:800}
+.stitch-target-compare em{font-size:7px;font-weight:700;opacity:.82}
+.stitch-target-compare.good{background:var(--st-primary-soft);color:var(--st-primary)}
+.stitch-target-compare.bad{background:var(--st-red-soft);color:var(--st-red)}
+.stitch-target-compare.exact{background:var(--st-blue-soft);color:var(--st-blue)}
+.stitch-cashflow-kpis article{min-height:104px}
+.stitch-review-kpis>div{min-width:0}
+.stitch-review-kpis .stitch-target-compare{margin-top:10px}
+.dark .stitch-target-compare.neutral{background:var(--st-high)}
+
+@media(min-width:821px){
+ .stitch-history-balance-journey{grid-template-columns:minmax(0,1fr) minmax(155px,auto) minmax(0,1fr)}
+ .stitch-history-balance-point{text-align:center;justify-self:stretch}
+ .stitch-history-balance-point small,.stitch-history-balance-point strong,.stitch-history-balance-point span{text-align:center}
+}
+@media(min-width:1101px){
+ .stitch-history-category-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media(max-width:820px){
+ .stitch-target-compare{width:100%;border-radius:10px;padding:5px 7px}
+ .stitch-cashflow-kpis article{min-height:112px}
+}
+
 .stitch-sync-protection{display:grid;grid-template-columns:minmax(0,1fr) auto auto;align-items:center;gap:20px;background:linear-gradient(135deg,var(--st-primary-soft),var(--st-surface))!important}
 .stitch-sync-protection h2{margin:3px 0 2px}.stitch-sync-protection p{margin:0}
 .stitch-sync-protection-facts{display:flex;align-items:center;gap:8px}
