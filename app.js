@@ -29,7 +29,7 @@ const categoryIconCatalog=[
 const fixedExpenseWords=['שכר דירה','שכירות','משכנתא','ארנונה','ועד בית','ביטוח','הלוואה','חשבון','חשבונות','חשמל','מים','גז','גן','גנים','מעון','צהרון','אינטרנט','טלפון','סלולר','מנוי'];
 
 const defaults={
- version:17,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],budgetFlexTransfers:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
+ version:17,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],budgetFlexTransfers:[],monthlyOpeningBalances:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
  settings:{name:'יראל',currency:'ILS',onboarded:false,budgetSort:'manual'},
 };
 const defaultCategories=[
@@ -66,7 +66,7 @@ function categoryIconName(c={}){
 }
 function migrate(raw){
  let d={...structuredClone(defaults),...(raw||{})};
- for(const k of ['transactions','accounts','wallets','categories','budgets','budgetFlexTransfers','monthPlans','goals','debts','recurring','snapshots','reviews'])if(!Array.isArray(d[k]))d[k]=[];
+ for(const k of ['transactions','accounts','wallets','categories','budgets','budgetFlexTransfers','monthlyOpeningBalances','monthPlans','goals','debts','recurring','snapshots','reviews'])if(!Array.isArray(d[k]))d[k]=[];
  if(!d.categories.length)d.categories=defaultCategories;
  d.settings={...defaults.settings,...(d.settings||{})};
  const migrationTime=new Date().toISOString();
@@ -75,6 +75,7 @@ function migrate(raw){
  d.transactions=d.transactions.map(t=>({...t,amount:+t.amount||0,kind:t.kind||'expense',reviewed:t.reviewed??true,createdAt:t.createdAt||null}));
  d.categories=d.categories.map(c=>({...c,icon:c.icon==='apparel'?'checkroom':c.icon||'',budgetBehavior:['fixed','variable'].includes(c.budgetBehavior)?c.budgetBehavior:'auto'}));
  d.budgetFlexTransfers=d.budgetFlexTransfers.map(x=>({...x,amount:Math.max(0,Math.round((+x.amount||0)*100)/100),type:x.type==='allocate'?'allocate':'collect',createdAt:x.createdAt||migrationTime})).filter(x=>x.id&&x.month&&x.amount>0);
+ d.monthlyOpeningBalances=d.monthlyOpeningBalances.map(x=>({...x,amount:Math.round((+x.amount||0)*100)/100,type:x.type==='cash'?'cash':'bank',source:x.source==='manual'?'manual':'auto',createdAt:x.createdAt||migrationTime})).filter(x=>/^\d{4}-\d{2}$/.test(x.month||''));
  d.debts=d.debts.map(x=>{let balance=+x.balance||0;return{...x,balance,interest:+x.interest||0,payment:+x.payment||0,originalBalance:+x.originalBalance||balance,lender:x.lender||''}});
  d.ironBudget=d.ironBudget&&Array.isArray(d.ironBudget.categories)?d.ironBudget:{income:0,categories:[]};
  d.goals=d.goals.map(g=>{let hadNewSchedule=!!(g.startMonth||g.deadlineMonth),startMonth=g.startMonth||monthKey(),deadlineMonth=g.deadlineMonth||(g.date||'').slice(0,7),term=g.term||(monthsInclusive(startMonth,deadlineMonth)&&monthsInclusive(startMonth,deadlineMonth)<=24?'short':'long');return{...g,target:+g.target||0,current:+g.current||0,monthly:+g.monthly||0,startMonth,deadlineMonth,calculationMode:g.calculationMode||(hadNewSchedule?'auto':'manual'),moneyLocation:g.moneyLocation||'',term}});
@@ -451,6 +452,44 @@ function effectiveBalance(a){
  return value
 }
 function subtypeBalance(type){return db.accounts.filter(a=>a.type==='asset'&&a.subtype===type).reduce((s,a)=>s+effectiveBalance(a),0)}
+function subtypeMonthMovement(type,m=monthKey()){
+ let accounts=db.accounts.filter(a=>a.type==='asset'&&a.subtype===type),ids=new Set(accounts.map(a=>a.id)),cutoffs=new Map(accounts.map(a=>[a.id,a.balanceAsOf||'']));
+ return roundBudgetAmount(monthTx(m).reduce((sum,t)=>{
+  let amount=+t.amount||0;
+  if(t.kind==='transfer'){
+   if(ids.has(t.account)&&t.createdAt&&t.createdAt>cutoffs.get(t.account))sum-=amount;
+   if(ids.has(t.toAccount)&&t.createdAt&&t.createdAt>cutoffs.get(t.toAccount))sum+=amount;
+   return sum
+  }
+  if(ids.has(t.account)&&t.createdAt&&t.createdAt>cutoffs.get(t.account))sum+=t.kind==='income'?amount:-amount;
+  return sum
+ },0))
+}
+function inferredMonthlyOpeningBalance(type,m=monthKey()){
+ return roundBudgetAmount(subtypeBalance(type)-subtypeMonthMovement(type,m))
+}
+function ensureMonthlyOpeningBalances(m=monthKey()){
+ let changed=false;
+ ['bank','cash'].forEach(type=>{
+  if(db.monthlyOpeningBalances.some(x=>x.month===m&&x.type===type))return;
+  db.monthlyOpeningBalances.push({id:uid(),month:m,type,amount:inferredMonthlyOpeningBalance(type,m),source:'auto',createdAt:new Date().toISOString()});changed=true
+ });
+ if(changed)persist();
+ return changed
+}
+function monthlyOpeningBalance(type,m=monthKey()){
+ ensureMonthlyOpeningBalances(m);
+ return roundBudgetAmount(db.monthlyOpeningBalances.find(x=>x.month===m&&x.type===type)?.amount||0)
+}
+function setMonthlyOpeningBalance(type,m,amount){
+ let row=db.monthlyOpeningBalances.find(x=>x.month===m&&x.type===type),value=roundBudgetAmount(amount);
+ if(row)Object.assign(row,{amount:value,source:'manual',updatedAt:new Date().toISOString()});
+ else db.monthlyOpeningBalances.push({id:uid(),month:m,type,amount:value,source:'manual',createdAt:new Date().toISOString()});
+ return value
+}
+function monthlyBalanceChange(type,m=monthKey()){
+ return roundBudgetAmount(subtypeBalance(type)-monthlyOpeningBalance(type,m))
+}
 function liveAssets(){return db.accounts.filter(a=>a.type==='asset').reduce((s,a)=>s+effectiveBalance(a),0)}
 function liveLiabilities(){return db.accounts.filter(a=>a.type==='liability').reduce((s,a)=>s+a.balance,0)}
 function correctSubtype(type,label){
@@ -460,6 +499,11 @@ function correctSubtype(type,label){
 }
 actions.correctBank=()=>correctSubtype('bank','עו״ש');
 actions.correctCash=()=>correctSubtype('cash','מזומן');
+actions.correctOpeningBalances=()=>{
+ let m=monthKey();ensureMonthlyOpeningBalances(m);
+ modal(`יתרות פתיחה - ${monthName(m)}`,`<div class="opening-balance-note"><b>נקודת ההשוואה של החודש</b><p>רשום כמה היו בעו״ש ובמזומן בתחילת החודש. התיקון משפיע רק על ההשוואה החודשית ולא משנה את היתרה הנוכחית.</p></div><div class="form-grid"><label>עו״ש בתחילת החודש<input name="bank" type="number" step="0.01" value="${monthlyOpeningBalance('bank',m)}" required></label><label>מזומן בתחילת החודש<input name="cash" type="number" step="0.01" value="${monthlyOpeningBalance('cash',m)}" required></label></div>${field.actions}`,x=>{setMonthlyOpeningBalance('bank',m,x.bank);setMonthlyOpeningBalance('cash',m,x.cash);save('יתרות תחילת החודש עודכנו')});
+ $$('[data-close-modal]').forEach(b=>b.onclick=()=>$('#modal').hidden=true)
+};
 
 function dashboard(){
  heading(`שלום ${db.settings.name||''}, זו התמונה שלך`,`יום ${new Date().toLocaleDateString('he-IL',{weekday:'long',day:'numeric',month:'long'})}`);

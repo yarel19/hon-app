@@ -727,6 +727,243 @@ body.stitch-app>main{
  .stitch-debt-facts{grid-template-columns:1fr 1fr}
 }
 
+/* HON v27 - monthly opening balances and compact budget control center */
+.stitch-balance-grid{
+ grid-template-rows:auto auto auto;
+ align-content:stretch;
+}
+.stitch-balance-card{
+ min-height:114px;
+ align-items:start;
+ padding-block:14px 12px;
+}
+.stitch-balance-copy>strong{margin-top:2px!important}
+.stitch-balance-monthly{
+ display:grid;
+ grid-template-columns:minmax(0,1fr) minmax(0,1fr);
+ gap:9px;
+ margin-top:10px;
+ padding-top:9px;
+ border-top:1px solid color-mix(in srgb,var(--card-accent) 13%,var(--st-mid));
+}
+.stitch-balance-monthly>span{display:block;min-width:0}
+.stitch-balance-monthly small{
+ display:block;
+ margin-bottom:2px;
+ color:var(--st-muted)!important;
+ font-size:8px!important;
+ white-space:nowrap;
+}
+.stitch-balance-monthly b{
+ display:flex;
+ align-items:center;
+ gap:3px;
+ min-width:0;
+ color:var(--st-ink);
+ font-size:10px;
+ font-style:normal;
+ white-space:nowrap;
+}
+.stitch-balance-monthly b[dir="ltr"]{display:block;text-align:right}
+.stitch-balance-delta.up b{color:var(--st-primary)}
+.stitch-balance-delta.down b{color:var(--st-red)}
+.stitch-balance-delta.neutral b{color:var(--st-muted)}
+.stitch-balance-delta em{font-style:normal;unicode-bidi:isolate}
+.stitch-opening-summary{
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ gap:10px;
+ min-height:42px;
+ padding:8px 11px;
+ border:1px solid var(--st-mid);
+ border-radius:12px;
+ background:color-mix(in srgb,var(--st-surface) 88%,var(--st-low));
+ color:var(--st-muted);
+ font-size:9px;
+ font-weight:700;
+}
+.stitch-opening-summary.up{border-color:color-mix(in srgb,var(--st-primary) 20%,var(--st-mid));color:var(--st-primary)}
+.stitch-opening-summary.down{border-color:color-mix(in srgb,var(--st-red) 22%,var(--st-mid));color:var(--st-red)}
+.stitch-opening-summary button{
+ flex:0 0 auto;
+ padding:5px 8px;
+ border:0;
+ border-radius:8px;
+ background:var(--st-low);
+ color:var(--st-ink);
+ font:inherit;
+ cursor:pointer;
+}
+.opening-balance-note{
+ margin-bottom:17px;
+ padding:14px 15px;
+ border:1px solid color-mix(in srgb,var(--st-primary) 18%,var(--st-mid));
+ border-radius:13px;
+ background:var(--st-primary-soft);
+}
+.opening-balance-note b{display:block;color:var(--st-primary);font-size:13px}
+.opening-balance-note p{margin:4px 0 0;color:var(--st-muted);font-size:11px;line-height:1.6}
+
+.stitch-cashflow-command{
+ position:relative;
+ overflow:hidden;
+ margin-bottom:24px;
+ padding:22px 24px 0;
+ border:1px solid rgba(180,199,190,.46);
+ border-radius:21px;
+ background:
+  radial-gradient(circle at 100% 0,rgba(30,174,132,.1),transparent 27%),
+  linear-gradient(145deg,#fff,#f9fcfb);
+ box-shadow:0 16px 38px rgba(28,56,65,.075);
+}
+.stitch-cashflow-command:before{
+ content:"";
+ position:absolute;
+ inset:0 0 auto;
+ height:3px;
+ background:linear-gradient(90deg,var(--st-gold),var(--st-primary),var(--st-blue));
+}
+.stitch-cashflow-command-head{
+ display:flex;
+ align-items:center;
+ justify-content:space-between;
+ gap:24px;
+ margin-bottom:19px;
+}
+.stitch-cashflow-command-copy{min-width:0}
+.stitch-cashflow-command-copy>span{
+ display:block;
+ margin-bottom:2px;
+ color:var(--st-primary);
+ font-size:9px;
+ font-weight:800;
+ letter-spacing:.04em;
+}
+.stitch-cashflow-command-copy h1{margin:0;color:var(--st-ink);font-size:26px;line-height:1.25}
+.stitch-cashflow-command-copy p{margin:4px 0 0;color:var(--st-muted);font-size:10px}
+.stitch-cashflow-command-tools{display:flex;align-items:center;gap:9px;flex:0 0 auto}
+.stitch-cashflow-command .stitch-month-switch{
+ width:238px;
+ min-height:48px;
+ padding:4px;
+ border:1px solid var(--st-mid);
+ box-shadow:none;
+ background:rgba(255,255,255,.72);
+}
+.stitch-cashflow-command .stitch-month-switch button{width:38px;height:38px}
+.stitch-cashflow-command .stitch-sync{
+ width:48px;
+ height:48px;
+ border:1px solid var(--st-mid);
+ border-radius:13px;
+ background:rgba(255,255,255,.72);
+}
+.stitch-cashflow-kpis{
+ display:grid;
+ grid-template-columns:repeat(3,minmax(0,1fr));
+ overflow:hidden;
+ border:1px solid var(--st-mid);
+ border-radius:15px;
+ background:rgba(255,255,255,.72);
+}
+.stitch-cashflow-kpis article{
+ position:relative;
+ min-width:0;
+ padding:14px 18px 15px;
+}
+.stitch-cashflow-kpis article+article{border-inline-start:1px solid var(--st-mid)}
+.stitch-cashflow-kpis small{display:block;color:var(--st-muted);font-size:9px;font-weight:700}
+.stitch-cashflow-kpis strong{
+ display:block;
+ margin-top:3px;
+ color:var(--st-ink);
+ font-size:22px;
+ line-height:1.2;
+ text-align:right;
+ unicode-bidi:isolate;
+}
+.stitch-cashflow-kpis .income strong{color:var(--st-primary)}
+.stitch-cashflow-kpis .balance{
+ background:linear-gradient(135deg,color-mix(in srgb,var(--st-primary) 8%,#fff),rgba(255,255,255,.62));
+}
+.stitch-cashflow-kpis .balance strong{color:var(--st-primary)}
+.stitch-cashflow-kpis .balance.negative{
+ background:linear-gradient(135deg,color-mix(in srgb,var(--st-red) 8%,#fff),rgba(255,255,255,.62));
+}
+.stitch-cashflow-kpis .balance.negative strong{color:var(--st-red)}
+.stitch-cashflow-command .stitch-tabs{
+ justify-content:flex-start;
+ gap:4px;
+ width:max-content;
+ margin:14px 0 0;
+ padding:4px;
+ border:0;
+ border-radius:11px 11px 0 0;
+ background:var(--st-low);
+}
+.stitch-cashflow-command .stitch-tabs button{
+ min-width:135px;
+ margin:0;
+ padding:9px 14px;
+ border:0!important;
+ border-radius:8px;
+ font-size:11px;
+}
+.stitch-cashflow-command .stitch-tabs button.active{
+ background:var(--st-surface);
+ color:var(--st-primary);
+ box-shadow:0 4px 12px rgba(30,58,67,.08);
+}
+
+.dark .stitch-opening-summary{background:var(--st-surface);border-color:var(--st-high)}
+.dark .stitch-opening-summary button{background:var(--st-low);color:var(--st-ink)}
+.dark .opening-balance-note{background:#15342d;border-color:#245247}
+.dark .stitch-cashflow-command{
+ border-color:var(--st-high);
+ background:radial-gradient(circle at 100% 0,rgba(56,211,162,.1),transparent 29%),linear-gradient(145deg,#14282b,#102124);
+}
+.dark .stitch-cashflow-command .stitch-month-switch,.dark .stitch-cashflow-command .stitch-sync,
+.dark .stitch-cashflow-kpis{background:rgba(16,32,36,.82);border-color:var(--st-high)}
+.dark .stitch-cashflow-kpis article+article{border-color:var(--st-high)}
+.dark .stitch-cashflow-kpis .balance{background:rgba(32,94,76,.18)}
+.dark .stitch-cashflow-kpis .balance.negative{background:rgba(130,52,60,.18)}
+
+@media(max-width:1100px) and (min-width:821px){
+ .stitch-balance-grid{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}
+ .stitch-opening-summary{grid-column:1/-1}
+}
+
+@media(max-width:820px){
+ .stitch-balance-grid{grid-template-columns:minmax(0,1fr);grid-template-rows:auto!important}
+ .stitch-balance-card{grid-template-columns:38px minmax(0,1fr) 24px;min-height:112px;padding:13px 14px}
+ .stitch-balance-monthly{gap:12px}
+ .stitch-opening-summary{grid-column:1;min-height:45px;padding:8px 10px}
+ .stitch-opening-summary span{line-height:1.45}
+ .stitch-cashflow-command{margin-top:4px;padding:14px 12px 0;border-radius:18px}
+ .stitch-cashflow-command-head{margin-bottom:12px}
+ .stitch-cashflow-command-copy{display:none}
+ .stitch-cashflow-command-tools{width:100%;gap:7px}
+ .stitch-cashflow-command .stitch-month-switch{width:auto;min-width:0;flex:1}
+ .stitch-cashflow-command .stitch-sync{width:46px;height:46px;flex:0 0 46px}
+ .stitch-cashflow-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .stitch-cashflow-kpis article{padding:12px 11px}
+ .stitch-cashflow-kpis article+article{border-inline-start:1px solid var(--st-mid)}
+ .stitch-cashflow-kpis .balance{grid-column:1/-1;border-inline-start:0!important;border-top:1px solid var(--st-mid)}
+ .stitch-cashflow-kpis strong{font-size:18px}
+ .stitch-cashflow-command .stitch-tabs{width:100%;display:grid;grid-template-columns:1fr 1fr}
+ .stitch-cashflow-command .stitch-tabs button{min-width:0}
+}
+
+@media(max-width:430px){
+ .stitch-balance-card{grid-template-columns:34px minmax(0,1fr);padding-inline:11px}
+ .stitch-balance-edit{display:none}
+ .stitch-balance-monthly small{font-size:7.5px!important}
+ .stitch-balance-monthly b{font-size:9.5px}
+ .stitch-opening-summary{display:grid;grid-template-columns:minmax(0,1fr) auto}
+ .stitch-opening-summary button{padding-inline:7px;font-size:8px}
+}
+
 /* v21 - desktop overview polish and collision fixes */
 body.stitch-app{grid-template-columns:252px minmax(0,1fr)}
 body.stitch-app>aside{width:252px;padding:22px 12px 16px}
@@ -2414,4 +2651,33 @@ body.stitch-app>aside{
  .stitch-flex-collect-amount{grid-template-columns:minmax(0,1fr) auto}
  .stitch-flex-modal-total{grid-template-columns:minmax(0,1fr)}
  .stitch-flex-modal-total>span+span{padding-top:8px;border-top:1px solid rgba(255,255,255,.1)}
+}
+
+/* v27 final responsive cascade */
+.stitch-balance-grid{grid-template-columns:1fr;grid-template-rows:auto auto auto;align-content:stretch}
+.stitch-balance-card{min-height:114px;align-items:start;padding-block:14px 12px}
+.stitch-balance-copy>strong{margin-top:2px!important}
+.stitch-balance-monthly{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:9px;margin-top:10px;padding-top:9px;border-top:1px solid color-mix(in srgb,var(--card-accent) 13%,var(--st-mid))}
+.stitch-balance-monthly>span{display:block;min-width:0}
+.stitch-balance-monthly small{display:block;margin-bottom:2px;color:var(--st-muted)!important;font-size:8px!important;white-space:nowrap}
+.stitch-balance-monthly b{display:flex;align-items:center;gap:3px;min-width:0;color:var(--st-ink);font-size:10px;font-style:normal;white-space:nowrap}
+.stitch-balance-monthly b[dir="ltr"]{display:block;text-align:right}
+.stitch-balance-delta.up b{color:var(--st-primary)}
+.stitch-balance-delta.down b{color:var(--st-red)}
+.stitch-balance-delta.neutral b{color:var(--st-muted)}
+.stitch-opening-summary{grid-column:1/-1}
+
+@media(max-width:1100px) and (min-width:821px){
+ .stitch-balance-grid{grid-template-columns:1fr 1fr;grid-template-rows:auto auto}
+}
+@media(max-width:820px){
+ .stitch-balance-grid{grid-template-columns:minmax(0,1fr);grid-template-rows:auto!important}
+ .stitch-balance-card{grid-template-columns:38px minmax(0,1fr) 24px;min-height:112px;padding:13px 14px}
+ .stitch-opening-summary{grid-column:1}
+}
+@media(max-width:430px){
+ .stitch-balance-card{grid-template-columns:34px minmax(0,1fr);padding-inline:11px}
+ .stitch-balance-edit{display:none}
+ .stitch-balance-monthly small{font-size:7.5px!important}
+ .stitch-balance-monthly b{font-size:9.5px}
 }
