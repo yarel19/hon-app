@@ -1,4 +1,4 @@
-/* HON Stitch UI v27
+/* HON Stitch UI v28
  * Visual layer based on the user's exported Google Stitch screens.
  * The data model, persistence and Supabase synchronization remain in app.js/cloud.js.
  */
@@ -10,6 +10,7 @@ var stitchPages=[
  ['wallets','wallet','ארנקים'],
  ['goals','emoji_events','מטרות'],
  ['debts','credit_score','חובות'],
+ ['history','history','היסטוריה חודשית'],
  ['review','event_available','סגירת חודש'],
  ['settings','settings','הגדרות']
 ];
@@ -107,11 +108,6 @@ dashboard=function(){
   <div class="stitch-dashboard-grid">
    <div class="stitch-dashboard-main">
     <article class="stitch-net-hero ${change!=null&&change<0?'declining':''}"><small>הון נקי</small><strong>${money(net)}</strong><div class="stitch-net-trend"><b dir="ltr">${trend}</b><span>${change==null?'מתעדכן מכל הנכסים והחובות':'לעומת החודש האחרון'}</span></div></article>
-    <div class="stitch-balance-grid">
-     <button type="button" class="stitch-balance-card bank" data-action="correctBank"><span class="stitch-balance-icon">${stitchIcon('account_balance')}</span><span class="stitch-balance-copy"><small>עו״ש עכשיו</small><strong dir="ltr">${money(bankNow)}</strong><span class="stitch-balance-monthly"><span><small>בתחילת ${openingMonth}</small><b dir="ltr">${money(bankOpening)}</b></span>${stitchMonthlyBalanceDelta(bankDelta)}</span></span><span class="stitch-balance-edit" aria-hidden="true">${stitchIcon('edit')}</span></button>
-     <button type="button" class="stitch-balance-card cash" data-action="correctCash"><span class="stitch-balance-icon">${stitchIcon('payments')}</span><span class="stitch-balance-copy"><small>מזומן נגיש</small><strong dir="ltr">${money(cashNow)}</strong><span class="stitch-balance-monthly"><span><small>בתחילת ${openingMonth}</small><b dir="ltr">${money(cashOpening)}</b></span>${stitchMonthlyBalanceDelta(cashDelta)}</span></span><span class="stitch-balance-edit" aria-hidden="true">${stitchIcon('edit')}</span></button>
-     <div class="stitch-opening-summary ${combinedDelta>0.009?'up':combinedDelta<-.009?'down':'neutral'}"><span>${stitchCombinedBalanceText(combinedDelta)}</span><button type="button" data-action="correctOpeningBalances">תיקון יתרות פתיחה</button></div>
-    </div>
     <article class="stitch-month-card">
      <div class="stitch-month-head"><span class="stitch-month-icon">${stitchIcon('calendar_month')}</span><div><small>החודש הנוכחי</small><h2>סיכום חודש ${new Date(monthKey()+'-15').toLocaleDateString('he-IL',{month:'long'})}</h2></div></div>
      <div class="stitch-month-line income"><span>הכנסות</span><strong>${money(t.income)}</strong><div class="stitch-line-progress"><i style="width:${Math.min(100,t.income/max*100)}%"></i></div></div>
@@ -121,6 +117,11 @@ dashboard=function(){
     <section class="stitch-activity-section"><div class="stitch-section-title"><h2>פעילות אחרונה</h2><div class="stitch-section-actions"><button type="button" class="stitch-section-link" data-page="cashflow">כל הפעולות ${stitchIcon('chevron_left')}</button><button type="button" class="stitch-add-circle" data-action="addTx" aria-label="הוספת תנועה">${stitchIcon('add')}</button></div></div><div class="stitch-activity-card">${recent.length?recent.map(x=>stitchTxRow(x)).join(''):empty('＋','מתחילים מכאן','הוסף תנועה ראשונה')}</div></section>
    </div>
    <aside class="stitch-dashboard-rail">
+    <div class="stitch-balance-grid">
+     <button type="button" class="stitch-balance-card bank" data-action="correctBank"><span class="stitch-balance-icon">${stitchIcon('account_balance')}</span><span class="stitch-balance-copy"><small>עו״ש עכשיו</small><strong dir="ltr">${money(bankNow)}</strong><span class="stitch-balance-monthly"><span><small>בתחילת ${openingMonth}</small><b dir="ltr">${money(bankOpening)}</b></span>${stitchMonthlyBalanceDelta(bankDelta)}</span></span><span class="stitch-balance-edit" aria-hidden="true">${stitchIcon('edit')}</span></button>
+     <button type="button" class="stitch-balance-card cash" data-action="correctCash"><span class="stitch-balance-icon">${stitchIcon('payments')}</span><span class="stitch-balance-copy"><small>מזומן נגיש</small><strong dir="ltr">${money(cashNow)}</strong><span class="stitch-balance-monthly"><span><small>בתחילת ${openingMonth}</small><b dir="ltr">${money(cashOpening)}</b></span>${stitchMonthlyBalanceDelta(cashDelta)}</span></span><span class="stitch-balance-edit" aria-hidden="true">${stitchIcon('edit')}</span></button>
+     <div class="stitch-opening-summary ${combinedDelta>0.009?'up':combinedDelta<-.009?'down':'neutral'}"><span>${stitchCombinedBalanceText(combinedDelta)}</span><button type="button" data-action="correctOpeningBalances">תיקון יתרות פתיחה</button></div>
+    </div>
     <section class="stitch-advice-section">${stitchSectionTitle('הצעות ייעול') }<div class="stitch-advice-grid">${adviceHtml||'<p class="muted">לאחר הוספת תנועות יוצגו כאן המלצות.</p>'}</div></section>
     <section class="stitch-wallet-section">${stitchSectionTitle('ארנקים דיגיטליים','נהל הכל','wallets')}<div class="stitch-wallet-compact-list">${walletHtml||'<p class="muted">עוד לא נוספו ארנקים.</p>'}</div></section>
    </aside>
@@ -382,6 +383,36 @@ debts=function(){
  stitchBindCommon()
 };
 
+function stitchHistoryChange(value){
+ if(Math.abs(value)<.009)return'<span class="neutral">ללא שינוי</span>';
+ return `<span class="${value>0?'up':'down'}">${value>0?'עלייה':'ירידה'} של <b dir="ltr">${money(Math.abs(value))}</b></span>`
+}
+function stitchHistoryCategoryRow(row,max){
+ let width=Math.min(100,row.spent/Math.max(1,row.target,row.spent,max*.08)*100),state=row.target===0&&row.spent>0?'no-target':row.difference<0?'over':'ok',status=state==='no-target'?'הוצאה ללא יעד':state==='over'?`חריגה ${money(Math.abs(row.difference))}`:`נשאר ${money(row.difference)}`;
+ return `<article class="stitch-history-category ${state}"><div class="stitch-history-category-head"><span class="stitch-history-category-name"><i style="--history-color:${row.color}"></i><b>${esc(row.name)}</b></span><strong>${money(row.spent)}</strong></div><div class="stitch-history-category-meta"><span>${row.target?`יעד ${money(row.target)}`:'לא הוגדר יעד'}</span><b>${status}</b></div><div class="stitch-history-category-progress"><i style="width:${width}%;--history-color:${row.color}"></i></div></article>`
+}
+
+monthlyHistory=function(){
+ heading('היסטוריה חודשית','הסיפור הפיננסי של כל חודש, במספרים החשובים באמת');
+ let months=availableHistoryMonths();if(!months.includes(selectedMonth))selectedMonth=months.at(-1)||monthKey();
+ let index=months.indexOf(selectedMonth),data=monthlyHistoryData(selectedMonth),closed=!!(data.review||data.snapshot),historyStatus=closed?'חודש סגור ומתועד':selectedMonth===monthKey()?'נתונים חיים':'סיכום מחושב',maxCategory=Math.max(1,...data.categories.map(x=>x.spent)),resultLabel=data.result>=0?'רווח חודשי':'הפסד חודשי',recentMonths=months.slice(-7).reverse(),net=data.snapshot?.net,reviewText=data.review?.decision||data.review?.lesson||data.review?.win||'';
+ $('#view').innerHTML=`<section class="stitch-page stitch-history-page">
+  ${stitchMobileHeader('היסטוריה חודשית')}
+  <header class="stitch-history-page-head"><div><span class="stitch-kicker">הארכיון הפיננסי שלך</span><h1>סיכום ${monthName(selectedMonth)}</h1><p>תמונת החודש נשמרת לפי התנועות, התקציב ויתרות העו״ש והמזומן.</p></div><div class="stitch-history-month-switch"><button type="button" data-history-shift="-1" ${index<=0?'disabled':''}>${stitchIcon('chevron_right')}</button><b>${monthName(selectedMonth)}</b><button type="button" data-history-shift="1" ${index>=months.length-1?'disabled':''}>${stitchIcon('chevron_left')}</button></div></header>
+  <div class="stitch-history-months">${recentMonths.map(m=>`<button type="button" class="${m===selectedMonth?'active':''}" data-history-month="${m}">${new Date(m+'-15T12:00:00').toLocaleDateString('he-IL',{month:'short',year:'2-digit'})}</button>`).join('')}</div>
+  <article class="stitch-history-hero ${data.result<0?'negative':''}"><div><span>${historyStatus}</span><h2>${resultLabel}</h2><p>${data.result>=0?'ההכנסות היו גבוהות מכל מה שיצא החודש.':'כל מה שיצא היה גבוה מההכנסות החודש.'}</p></div><strong dir="ltr">${signedMoney(data.result)}</strong></article>
+  <section class="stitch-history-balance-journey"><div class="stitch-history-balance-point"><small>יתרות בתחילת החודש</small><strong dir="ltr">${money(data.opening)}</strong><span>עו״ש ${money(data.bank.start)} · מזומן ${money(data.cash.start)}</span></div><div class="stitch-history-balance-change">${stitchIcon(data.liquidChange>=0?'trending_up':'trending_down')}${stitchHistoryChange(data.liquidChange)}</div><div class="stitch-history-balance-point closing"><small>יתרות בסוף החודש</small><strong dir="ltr">${money(data.closing)}</strong><span>עו״ש ${money(data.bank.end)} · מזומן ${money(data.cash.end)}</span></div></section>
+  <div class="stitch-history-kpis"><article><span class="income">${stitchIcon('south_west')}</span><small>הכנסות</small><strong>${money(data.totals.income)}</strong></article><article><span class="out">${stitchIcon('north_east')}</span><small>כל מה שיצא</small><strong>${money(data.out)}</strong></article><article><span class="saving">${stitchIcon('savings')}</span><small>חיסכון והפקדות</small><strong>${money(data.totals.saving)}</strong></article><article><span class="count">${stitchIcon('receipt_long')}</span><small>מספר תנועות</small><strong>${data.transactionCount}</strong></article></div>
+  <div class="stitch-history-content">
+   <section class="stitch-history-categories"><div class="stitch-section-title"><div><span class="stitch-kicker">תקציב בפועל</span><h2>סיכום לפי קטגוריות</h2></div><small>${data.categories.length} קטגוריות פעילות</small></div><div class="stitch-history-category-grid">${data.categories.length?data.categories.map(row=>stitchHistoryCategoryRow(row,maxCategory)).join(''):empty('receipt_long','אין פעילות תקציבית','לא נרשמו הוצאות או יעדים בחודש הזה')}</div></section>
+   <aside class="stitch-history-insights"><article><span>${stitchIcon('monitoring')}</span><div><small>הקטגוריה הגדולה</small><b>${data.topCategory?esc(data.topCategory.name):'אין עדיין'}</b><strong>${data.topCategory?money(data.topCategory.spent):'0 ₪'}</strong></div></article><article><span>${stitchIcon('savings')}</span><div><small>שיעור חיסכון</small><b>${numberAmount(data.savingsRate)}%</b><strong>${data.totals.income?'מתוך ההכנסות':'אין הכנסה רשומה'}</strong></div></article>${Number.isFinite(+net)?`<article><span>${stitchIcon('account_balance_wallet')}</span><div><small>הון נקי בסגירת החודש</small><b>${money(net)}</b><strong>ללא ארנקים דיגיטליים</strong></div></article>`:''}${reviewText?`<article class="decision"><span>${stitchIcon('task_alt')}</span><div><small>החלטת החודש</small><b>${esc(reviewText)}</b></div></article>`:''}</aside>
+  </div>
+ </section>`;
+ $$('[data-history-shift]').forEach(button=>button.onclick=()=>{let next=index+Number(button.dataset.historyShift);if(months[next]){selectedMonth=months[next];render()}});
+ $$('[data-history-month]').forEach(button=>button.onclick=()=>{selectedMonth=button.dataset.historyMonth;render()});
+ stitchBindCommon()
+};
+
 review=function(){
  heading('סגירת חודש','אימות, תובנות והחלטה אחת לחודש הבא');
  let t=totals(selectedMonth),f=forecast(selectedMonth),rows=[...monthTx(selectedMonth)].sort((a,b)=>(b.date||'').localeCompare(a.date||'')),unreviewed=rows.filter(x=>!x.reviewed),existing=db.reviews.find(r=>r.month===selectedMonth)||{},advice=professionalInsights(selectedMonth),steps=['סיכום פיננסי','אימות עסקאות','תובנות','רפלקציה'],body='';
@@ -398,20 +429,30 @@ review=function(){
  stitchBindCommon()
 };
 
+function stitchOpenCloudVersions(){
+ let backups=window.HONCloud?.getBackups?.()||[];
+ modal('גרסאות קודמות בענן',`<div class="stitch-cloud-version-intro"><b>רשת ביטחון לסנכרון</b><p>לפני החלפת גרסה נשמר עותק קודם. שחזור יחזיר את כל האפליקציה למצב שבחרת ואז יסנכרן אותו לכל המכשירים.</p></div><div class="stitch-cloud-version-list">${backups.length?[...backups].reverse().map((entry,reverseIndex)=>{let originalIndex=backups.length-1-reverseIndex,date=entry.savedAt?new Date(entry.savedAt).toLocaleString('he-IL'):'מועד לא ידוע',counts=entry.data||{};return `<article><span>${stitchIcon('history')}</span><div><b>${date}</b><small>${counts.transactions?.length||0} תנועות · ${counts.accounts?.length||0} חשבונות · ${counts.goals?.length||0} מטרות</small></div><button type="button" class="ghost" data-restore-cloud="${originalIndex}">שחזור</button></article>`}).join(''):'<p class="muted">גרסאות קודמות יופיעו כאן לאחר השינויים הבאים שיסונכרנו.</p>'}</div><div class="form-actions full"><button type="button" class="primary" data-close-cloud>סגירה</button></div>`,()=>{});
+ $('[data-close-cloud]').onclick=()=>$('#modal').hidden=true;
+ $$('[data-restore-cloud]').forEach(button=>button.onclick=async()=>{if(!confirm('לשחזר את הגרסה הזו? המצב הנוכחי יישמר גם הוא כגרסה קודמת.'))return;button.disabled=true;button.textContent='משחזר…';await window.HONCloud.restoreVersion(+button.dataset.restoreCloud);$('#modal').hidden=true;toast('הגרסה שוחזרה ומסתנכרנת')})
+}
+
 settings=function(){
  heading('הגדרות','פרופיל, קטגוריות, גיבוי ופרטיות');
+ let cloudBackups=window.HONCloud?.getBackups?.()||[];
  $('#view').innerHTML=`<section class="stitch-page">
   ${stitchMobileHeader('הגדרות')}
   <div class="stitch-page-top"><h1>הגדרות</h1><button type="button" class="stitch-sync" data-sync-now>${stitchIcon('sync')}</button></div>
   <div class="stitch-settings-grid">
    <article class="stitch-review-card"><span class="stitch-kicker">המשפחה</span><h2>הפרופיל שלי</h2><label>השם שיופיע באפליקציה<input id="userName" value="${esc(db.settings.name||'')}"></label><div class="stitch-review-actions"><button type="button" class="ghost" id="settingsTheme">${stitchIcon(document.documentElement.classList.contains('dark')?'light_mode':'dark_mode')} החלפת מצב תצוגה</button><button type="button" class="primary" data-action="saveName">שמירת השם</button></div></article>
    <article class="stitch-review-card"><span class="stitch-kicker">שמירה והעברה</span><h2>גיבוי מלא</h2><p class="muted">הורד עותק פרטי של כל המידע. אפשר לשחזר אותו בכל מכשיר ובכל גרסה.</p><div class="stitch-review-actions"><label class="ghost upload">שחזור מגיבוי<input id="importFile" type="file" accept=".json" hidden></label><button type="button" class="primary" data-action="export">הורדת גיבוי</button></div></article>
+   <article class="stitch-review-card full-width-card stitch-sync-protection"><div><span class="stitch-kicker">הגנת מידע בין מכשירים</span><h2>סנכרון מוגן</h2><p class="muted">המחשב והטלפון ממזגים שינויים. מכשיר ישן לא יכול עוד לדרוס מידע חדש.</p></div><div class="stitch-sync-protection-facts"><span>${stitchIcon('merge')}<b>מיזוג שינויים</b></span><span>${stitchIcon('verified_user')}<b>מניעת דריסה</b></span><span>${stitchIcon('history')}<b>${cloudBackups.length} גרסאות קודמות</b></span></div><button type="button" class="ghost" id="cloudVersions">צפייה ושחזור</button></article>
    <article class="stitch-review-card full-width-card"><div class="stitch-section-title"><div><span class="stitch-kicker">סדר, אייקונים וצבעים</span><h2>קטגוריות</h2></div><button type="button" class="primary" data-action="addCat">＋ קטגוריה</button></div><div id="categorySorter" class="stitch-category-list">${db.categories.map((c,index)=>`<div class="stitch-category-row" draggable="true" data-cat-id="${c.id}"><span class="drag-handle">⋮⋮</span><span class="stitch-category-icon" style="--cat-color:${c.color}">${stitchIcon(categoryIconName(c))}</span><span><b>${esc(c.name)}</b><small>${typeName(c.kind)}</small></span><div><button type="button" class="mini-btn" data-action="moveCatUp" data-id="${c.id}" ${index===0?'disabled':''}>↑</button><button type="button" class="mini-btn" data-action="moveCatDown" data-id="${c.id}" ${index===db.categories.length-1?'disabled':''}>↓</button><button type="button" class="mini-btn" data-action="editCat" data-id="${c.id}">עריכה</button></div></div>`).join('')}</div></article>
    <article class="stitch-review-card full-width-card"><span class="stitch-kicker">פרטיות ותחזוקה</span><h2>המידע שלך</h2><p class="muted">המידע נשמר במכשיר ומסתנכרן לענן כשהחשבון מחובר.</p><div class="stitch-data-facts"><span>${db.transactions.length}<small>תנועות</small></span><span>${db.accounts.length}<small>חשבונות</small></span><span>${db.wallets.length}<small>ארנקים</small></span><span>${db.goals.length}<small>מטרות</small></span></div><button type="button" class="danger" data-action="reset">מחיקת כל הנתונים</button></article>
   </div>
  </section>`;
  $('#importFile').onchange=importData;
  $('#settingsTheme').onclick=()=>{toggleTheme();render()};
+ $('#cloudVersions').onclick=stitchOpenCloudVersions;
  bindCategoryDrag();stitchBindCommon()
 };
 
