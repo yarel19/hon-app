@@ -2894,3 +2894,19 @@ body.stitch-app>aside{
 @media(max-width:820px){
  .stitch-overview-forecast{margin-top:0}
 }
+
+/* HON v34 - fixed monthly goal plan and visible deposit completion */
+.stitch-goal-deposit-state{
+ display:flex;align-items:center;min-height:34px;margin-top:11px;padding:8px 10px;
+ border:1px solid var(--st-mid);border-radius:10px;background:var(--st-low);
+ color:var(--st-muted);font-size:9px;font-weight:800;
+}
+.stitch-goal-deposit-state.complete{border-color:color-mix(in srgb,var(--st-primary) 24%,var(--st-mid));background:var(--st-primary-soft);color:var(--st-primary)}
+.stitch-goal-deposit-state.partial{border-color:color-mix(in srgb,var(--st-gold) 28%,var(--st-mid));background:color-mix(in srgb,#f6f0e3 72%,var(--st-surface));color:#8d6820}
+.stitch-goal-month-parts>div span em{
+ display:block;margin-top:4px;color:var(--st-muted);font-size:8px;font-style:normal;font-weight:750;
+}
+.stitch-goal-month-parts>div.complete{background:color-mix(in srgb,var(--st-primary-soft) 58%,var(--st-surface))}
+.stitch-goal-month-parts>div.complete span em{color:var(--st-primary)}
+.stitch-goal-month-parts>div.partial span em{color:#9a7022}
+.dark .stitch-goal-deposit-state.partial{background:#352f20;color:#e4c26e}
