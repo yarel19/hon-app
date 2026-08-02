@@ -14,6 +14,7 @@
   if(item.id)return `id:${item.id}`;
   if(path==='budgets')return `budget:${item.month||''}:${item.category||''}`;
   if(path==='monthPlans'||path==='snapshots'||path==='reviews')return `month:${item.month||''}`;
+  if(path==='reviews[].categoryAssessments')return `assessment:${item.category||''}`;
   if(path==='monthlyOpeningBalances')return `opening:${item.month||''}:${item.type||''}`;
   if(path==='ironBudget.categories')return `iron:${item.category||''}`;
   return `object:${stable(item)}:${index}`
