@@ -257,7 +257,7 @@ actions.flexHistory=stitchOpenFlexHistory;
 
 function stitchForecastView(){
  let mode=db.settings.budgetSort||'manual';
- return `${stitchFlexFundCard()}
+ return `<div class="stitch-budget-command-row">${stitchFlexFundCard()}
   <div class="stitch-budget-toolbar stitch-budget-toolbar-v23">
    <div class="stitch-budget-toolbar-heading"><h3>קטגוריות תקציב</h3><small>בחר סידור, עדכן את החודש או השתמש בתבנית הקבועה.</small></div>
    <div class="stitch-budget-controls">
@@ -266,7 +266,7 @@ function stitchForecastView(){
     <button type="button" class="ghost" data-action="applyIronBudget">החלת הברזל</button>
     <button type="button" class="primary" data-action="setBudget">עריכת החודש</button>
    </div>
-  </div><div class="stitch-budget-grid">${stitchBudgetCards()}</div>`
+  </div></div><div class="stitch-budget-grid">${stitchBudgetCards()}</div>`
 }
 function stitchTransactionsView(){
  return `<div class="stitch-search-row"><div class="stitch-searchbox">${stitchIcon('search')}<input id="txSearch" placeholder="חיפוש תנועה…"></div><select id="txKind"><option value="">כל הסוגים</option><option value="income">הכנסות</option><option value="expense">הוצאות</option><option value="saving">חיסכון</option><option value="transfer">העברות</option><option value="debt">החזר חוב</option></select><select id="txSort"><option value="date_desc">תאריך: חדש לישן</option><option value="date_asc">תאריך: ישן לחדש</option><option value="category">לפי קטגוריה</option><option value="amount_desc">סכום: גבוה לנמוך</option><option value="amount_asc">סכום: נמוך לגבוה</option></select><button type="button" class="primary" data-action="addTx">＋ תנועה חדשה</button></div><div class="stitch-transactions-card" id="txList"></div>`
