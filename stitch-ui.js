@@ -47,10 +47,10 @@ function stitchTxAmount(tx){
  return`−${numberAmount(tx.amount)} ₪`
 }
 function stitchTxRow(tx,reviewButton=false,detailed=false){
- let c=cat(tx.category),date=tx.date?new Date(tx.date+'T12:00').toLocaleDateString('he-IL',{day:'numeric',month:'short'}):'';
+ let c=cat(tx.category),date=tx.date?new Date(tx.date+'T12:00').toLocaleDateString('he-IL',{day:'numeric',month:'short'}):'',note=String(tx.note||'').trim(),expenseDetails=detailed&&tx.kind==='expense',title=expenseDetails?c.name:(note||c.name),subtitle=expenseDetails?[note&&note!==c.name?note:'',date].filter(Boolean).join(' · '):[c.name,date].filter(Boolean).join(' · ');
  return `<article class="stitch-activity-row ${detailed?'detailed':''}" data-action="editTx" data-id="${tx.id}">
   <span class="stitch-tx-icon" style="--tx-color:${c.color||'#535f72'}">${stitchIcon(stitchTypeIcon(tx))}</span>
-  <span><b>${esc(tx.note||c.name)}</b><small>${esc(c.name)}${date?` · ${date}`:''}</small></span>
+  <span><b>${esc(title)}</b><small>${esc(subtitle)}</small></span>
   ${detailed?`<span class="stitch-tx-account"><small>חשבון</small><b>${esc(account(tx.account).name)}</b></span><span class="stitch-tx-kind"><small>סוג</small><b>${transactionTypeName(tx)}</b></span>`:''}
   ${reviewButton?`<button type="button" class="mini-btn" data-review-one="${tx.id}">אישור</button>`:`<strong class="${tx.kind==='income'?'income':''}" dir="ltr">${stitchTxAmount(tx)}</strong>`}
  </article>`

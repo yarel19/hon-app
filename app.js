@@ -615,7 +615,14 @@ function cashflow(){
 }
 
 function sortedTransactions(rows,sort){
- let r=[...rows];if(sort==='date_asc')r.sort((a,b)=>a.date.localeCompare(b.date));else if(sort==='date_desc')r.sort((a,b)=>b.date.localeCompare(a.date));else if(sort==='category')r.sort((a,b)=>cat(a.category).name.localeCompare(cat(b.category).name,'he'));else if(sort==='amount_desc')r.sort((a,b)=>b.amount-a.amount);else if(sort==='amount_asc')r.sort((a,b)=>a.amount-b.amount);return r
+ let r=[...rows],position=new Map(rows.map((tx,index)=>[tx.id,index]));
+ const newestAddedFirst=(a,b)=>{let at=Date.parse(a.createdAt||''),bt=Date.parse(b.createdAt||''),aTime=Number.isFinite(at)?at:0,bTime=Number.isFinite(bt)?bt:0;return bTime-aTime||(position.get(b.id)??0)-(position.get(a.id)??0)};
+ if(sort==='date_asc')r.sort((a,b)=>a.date.localeCompare(b.date)||newestAddedFirst(a,b));
+ else if(sort==='date_desc')r.sort((a,b)=>b.date.localeCompare(a.date)||newestAddedFirst(a,b));
+ else if(sort==='category')r.sort((a,b)=>cat(a.category).name.localeCompare(cat(b.category).name,'he')||newestAddedFirst(a,b));
+ else if(sort==='amount_desc')r.sort((a,b)=>b.amount-a.amount||newestAddedFirst(a,b));
+ else if(sort==='amount_asc')r.sort((a,b)=>a.amount-b.amount||newestAddedFirst(a,b));
+ return r
 }
 function transactions(){
  heading('כל התנועות','מיון, חיפוש, עריכה ובקרה');let t=totals(selectedMonth),out=t.expense+t.saving,rows=sortedTransactions(monthTx(selectedMonth),'date_desc');
