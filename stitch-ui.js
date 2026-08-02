@@ -360,10 +360,10 @@ wallets=function(){
 };
 
 function stitchGoalCard(g){
- let progress=Math.min(100,g.target?g.current/g.target*100:0),planned=goalPlanAmountForMonth(g,monthKey())||goalMonthlyAmount(g),status=goalStatus(g),future=status.className==='future',deadline=g.deadlineMonth||(g.date||'').slice(0,7),deposited=goalDepositedInMonth(g,monthKey()),nextMonthly=goalMonthlyAmount(g,shiftMonth(monthKey(),1)),monthly=deposited>0?nextMonthly:planned,monthDone=deposited>0,depositLabel=monthDone?`✓ הופקד החודש ${money(deposited)}${nextMonthly?` · היעד הבא ${money(nextMonthly)}`:' · המטרה הושלמה'}`:'ממתין להפקדה החודש';
+ let currentValue=goalCurrentValue(g),linked=goalLinkedAccount(g),progress=Math.min(100,g.target?currentValue/g.target*100:0),planned=goalPlanAmountForMonth(g,monthKey())||goalMonthlyAmount(g),status=goalStatus(g),future=status.className==='future',deadline=g.deadlineMonth||(g.date||'').slice(0,7),deposited=goalDepositedInMonth(g,monthKey()),nextMonthly=goalMonthlyAmount(g,shiftMonth(monthKey(),1)),monthDone=deposited+.009>=planned&&planned>0,monthly=deposited>0?nextMonthly:planned,depositLabel=deposited>0?`${monthDone?'✓':'◔'} הופקד החודש ${money(deposited)}${nextMonthly?` · היעד הבא ${money(nextMonthly)}`:' · המטרה הושלמה'}`:'ממתין להפקדה החודש';
  return `<article class="stitch-goal-card ${future?'future':''}">
-  <div class="stitch-goal-head"><div><h3>${esc(g.name)}</h3><small>${esc(g.moneyLocation||'מיקום הכסף לא הוגדר')}</small><span class="term ${g.term==='long'?'long':''}">${goalTerm(g)}</span></div><button type="button" class="mini-btn" data-action="editGoal" data-id="${g.id}">עריכה</button></div>
-  <div class="stitch-goal-amounts"><div><strong>${money(g.current)}</strong><span> מתוך ${money(g.target)}</span></div><b>${numberAmount(progress)}%</b></div>
+  <div class="stitch-goal-head"><div><h3>${esc(g.name)}</h3><small class="stitch-goal-location ${linked?'linked':''}">${linked?stitchIcon('link'):''}${linked?'מקושר אל ':''}${esc(goalLocationLabel(g))}</small><span class="term ${g.term==='long'?'long':''}">${goalTerm(g)}</span></div><button type="button" class="mini-btn" data-action="editGoal" data-id="${g.id}">עריכה</button></div>
+  <div class="stitch-goal-amounts"><div><strong>${money(currentValue)}</strong><span> מתוך ${money(g.target)}</span></div><b>${numberAmount(progress)}%</b></div>
   <div class="stitch-goal-progress"><i style="width:${progress}%"></i></div>
   <div class="stitch-goal-facts"><div><small>${deposited>0?'היעד החודשי הבא':'חיסכון חודשי נדרש'}</small><b>${monthly?money(monthly):'לא נדרש כרגע'}</b></div><div><small>תאריך היעד</small><b>${deadline?monthName(deadline):'לא הוגדר'}</b></div></div>
   ${!future&&monthly?`<div class="stitch-goal-deposit-state ${monthDone?'complete':deposited>0?'partial':'pending'}">${depositLabel}</div>`:''}
@@ -372,32 +372,32 @@ function stitchGoalCard(g){
 }
 
 function stitchGoalPlanForMonth(goals,m){
- return goals.filter(g=>goalIsActive(g,m)).map(g=>{let amount=goalPlanAmountForMonth(g,m),deposited=goalDepositedInMonth(g,m),nextAmount=goalMonthlyAmount(g,shiftMonth(m,1)),complete=deposited>0;return{goal:g,amount,deposited,nextAmount,remaining:complete?0:amount,complete}}).filter(x=>x.amount>0||x.deposited>0)
+ return goals.filter(g=>goalIsActive(g,m)).map(g=>{let amount=goalPlanAmountForMonth(g,m),deposited=goalDepositedInMonth(g,m),nextAmount=goalMonthlyAmount(g,shiftMonth(m,1)),remaining=Math.max(0,roundBudgetAmount(amount-deposited)),complete=amount>0&&remaining<.009;return{goal:g,amount,deposited,nextAmount,remaining,complete}}).filter(x=>x.amount>0||x.deposited>0)
 }
 function stitchGoalMonthlyPlan(goals){
- let now=monthKey(),year=+stitchGoalPlanMonth.slice(0,4),maxYear=Math.max(year,...goals.map(g=>+((g.deadlineMonth||(g.date||'').slice(0,7)||'').slice(0,4))||year)),parts=stitchGoalPlanForMonth(goals,stitchGoalPlanMonth),total=roundBudgetAmount(parts.reduce((sum,x)=>sum+x.amount,0)),remaining=roundBudgetAmount(parts.reduce((sum,x)=>sum+x.remaining,0)),completed=parts.filter(x=>x.complete).length;
+ let now=monthKey(),year=+stitchGoalPlanMonth.slice(0,4),depositYears=db.transactions.filter(t=>t.goalDeposit&&t.date).map(t=>+t.date.slice(0,4)).filter(Boolean),goalStartYears=goals.map(g=>+(g.startMonth||'').slice(0,4)).filter(Boolean),goalEndYears=goals.map(g=>+((g.deadlineMonth||(g.date||'').slice(0,7)||'').slice(0,4))).filter(Boolean),minYear=Math.min(+now.slice(0,4),...goalStartYears,...depositYears),maxYear=Math.max(+now.slice(0,4),...goalEndYears),parts=stitchGoalPlanForMonth(goals,stitchGoalPlanMonth),total=roundBudgetAmount(parts.reduce((sum,x)=>sum+x.amount,0)),remaining=roundBudgetAmount(parts.reduce((sum,x)=>sum+x.remaining,0)),completed=parts.filter(x=>x.complete).length,canDeposit=stitchGoalPlanMonth<=now;
  let months=Array.from({length:12},(_,index)=>{
-  let value=`${year}-${String(index+1).padStart(2,'0')}`,label=new Date(value+'-15T12:00').toLocaleDateString('he-IL',{month:'short'}),disabled=value<now;
-  return `<button type="button" data-goal-plan-month="${value}" class="${value===stitchGoalPlanMonth?'active':''}" ${disabled?'disabled':''}>${label}</button>`
+  let value=`${year}-${String(index+1).padStart(2,'0')}`,label=new Date(value+'-15T12:00').toLocaleDateString('he-IL',{month:'short'}),past=value<now;
+  return `<button type="button" data-goal-plan-month="${value}" class="${value===stitchGoalPlanMonth?'active':''} ${past?'past':''}">${label}</button>`
  }).join('');
  return `<section class="stitch-goal-plan-card">
-  <header class="stitch-goal-plan-head"><div><span class="stitch-kicker">תוכנית חודשית</span><h2>כמה צריך לחסוך בכל חודש</h2><p>בחר חודש וראה את הסכום הכולל ומאילו מטרות הוא מורכב.</p></div><div class="stitch-goal-year-switch"><button type="button" data-goal-year="-1" ${year<=+now.slice(0,4)?'disabled':''}>${stitchIcon('chevron_right')}</button><b>${year}</b><button type="button" data-goal-year="1" ${year>=maxYear?'disabled':''}>${stitchIcon('chevron_left')}</button></div></header>
+  <header class="stitch-goal-plan-head"><div><span class="stitch-kicker">תוכנית חודשית</span><h2>כמה צריך לחסוך בכל חודש</h2><p>אפשר לחזור לחודש קודם, להשלים הפקדה שנשכחה ולראות ממה מורכב הסכום.</p></div><div class="stitch-goal-year-switch"><button type="button" data-goal-year="-1" ${year<=minYear?'disabled':''}>${stitchIcon('chevron_right')}</button><b>${year}</b><button type="button" data-goal-year="1" ${year>=maxYear?'disabled':''}>${stitchIcon('chevron_left')}</button></div></header>
   <div class="stitch-goal-month-strip">${months}</div>
   <div class="stitch-goal-month-result">
    <div class="stitch-goal-month-total"><span class="stitch-goal-month-icon">${stitchIcon(remaining?'savings':'task_alt')}</span><div><small>תוכנית החיסכון ב${new Date(stitchGoalPlanMonth+'-15T12:00').toLocaleDateString('he-IL',{month:'long',year:'numeric'})}</small><strong>${money(total)}</strong><span>${parts.length?(remaining?`נותר להשלים ${money(remaining)} · ${completed} מתוך ${parts.length} בוצעו`:`✓ כל ההפקדות של החודש בוצעו`):'אין מטרות פעילות בחודש הזה'}</span></div></div>
-   <div class="stitch-goal-month-parts">${parts.length?parts.map(({goal,amount,deposited,nextAmount,complete})=>`<div class="${complete?'complete':''}"><span><b>${esc(goal.name)}</b><small>${esc(goal.moneyLocation||'מיקום הכסף לא הוגדר')}</small><em>${complete?`✓ הופקד ${money(deposited)}${nextAmount?` · היעד הבא ${money(nextAmount)}`:' · המטרה הושלמה'}`:'טרם הופקד החודש'}</em></span><strong>${money(amount)}</strong></div>`).join(''):`<div class="stitch-goal-month-empty">${stitchIcon('event_available')}<span><b>אין חיסכון מתוכנן</b><small>בחודש שנבחר לא מתחילה או ממשיכה אף מטרה.</small></span></div>`}</div>
+   <div class="stitch-goal-month-parts">${parts.length?parts.map(({goal,amount,deposited,nextAmount,complete,remaining:partRemaining})=>`<div class="${complete?'complete':deposited>0?'partial':''}"><span class="stitch-goal-month-part-main"><b>${esc(goal.name)}</b><small>${esc(goalLocationLabel(goal))}</small><em>${complete?`✓ הופקד ${money(deposited)}${nextAmount?` · היעד הבא ${money(nextAmount)}`:' · המטרה הושלמה'}`:deposited>0?`הופקד ${money(deposited)} · נותר ${money(partRemaining)}`:'טרם הופקד החודש'}</em></span><span class="stitch-goal-month-part-actions"><strong>${money(amount)}</strong>${canDeposit?`<button type="button" data-goal-deposit-month="${stitchGoalPlanMonth}" data-id="${goal.id}">${deposited>0?'הפקדה נוספת':'רישום הפקדה'}</button>`:''}</span></div>`).join(''):`<div class="stitch-goal-month-empty">${stitchIcon('event_available')}<span><b>אין חיסכון מתוכנן</b><small>בחודש שנבחר לא מתחילה או ממשיכה אף מטרה.</small></span></div>`}</div>
   </div>
  </section>`
 }
 
 goals=function(){
  heading('מטרות','תוכנית החיסכון והיעדים המשפחתיים');
- let sorted=[...db.goals].sort((a,b)=>(a.startMonth||'').localeCompare(b.startMonth||'')),active=sorted.filter(g=>goalIsActive(g,selectedMonth)),targets=sorted.reduce((s,g)=>s+(+g.target||0),0),saved=sorted.reduce((s,g)=>s+(+g.current||0),0),monthly=active.reduce((s,g)=>s+goalNextRequiredAmount(g,selectedMonth),0);
+ let sorted=[...db.goals].sort((a,b)=>(a.startMonth||'').localeCompare(b.startMonth||'')),active=sorted.filter(g=>goalIsActive(g,selectedMonth)),targets=sorted.reduce((s,g)=>s+(+g.target||0),0),saved=goalPortfolioSaved(sorted),monthly=active.reduce((s,g)=>s+goalNextRequiredAmount(g,selectedMonth),0),linkedCount=sorted.filter(goalLinkedAccount).length;
  let roadmap=sorted.map(g=>{let future=(g.startMonth||monthKey())>monthKey(),deadline=g.deadlineMonth||(g.date||'').slice(0,7);return `<div class="stitch-roadmap-line ${future?'future':''}"><span class="stitch-roadmap-dot">${stitchIcon(future?'schedule':'flag')}</span><span><b>${esc(g.name)}</b><small>${future?`מתחילים ב־${monthName(g.startMonth)}`:`פעילה עכשיו`}${deadline?` · יעד ${monthName(deadline)}`:''} · ${money(goalNextRequiredAmount(g,monthKey()))} בחודש</small></span></div>`}).join('');
  $('#view').innerHTML=`<section class="stitch-page">
   ${stitchMobileHeader('מטרות',`<button type="button" class="primary" data-action="addGoal">＋ מטרה חדשה</button>`)}
   <div class="stitch-page-top"><h1>מטרות פיננסיות</h1><button type="button" class="primary" data-action="addGoal">＋ מטרה חדשה</button></div>
-  <div class="stitch-goal-summary"><div><small>סך כל היעדים</small><strong>${money(targets)}</strong></div><div><small>כבר נצבר</small><strong class="up">${money(saved)}</strong></div><div><small>יעד חודשי מעודכן</small><strong>${money(monthly)}</strong></div></div>
+  <div class="stitch-goal-summary"><div><small>סך כל היעדים</small><strong>${money(targets)}</strong></div><div><small>נצבר לפי המטרות</small><strong class="up">${money(saved)}</strong><span>${linkedCount?`${linkedCount} מטרות מסונכרנות עם ההון העצמי`:'הסכומים מנוהלים בתוך המטרות'}</span></div><div><small>יעד חודשי מעודכן</small><strong>${money(monthly)}</strong></div></div>
   ${stitchGoalMonthlyPlan(sorted)}
   ${stitchSectionTitle('מטרות פעילות')}
   <div class="stitch-goal-grid">${sorted.length?sorted.map(stitchGoalCard).join(''):empty('emoji_events','עוד אין מטרות','הוסף מטרה ראשונה ובנה תוכנית חודשית')}</div>
@@ -405,6 +405,7 @@ goals=function(){
  </section>`;
  $$('[data-goal-year]').forEach(button=>button.onclick=()=>{let d=new Date(stitchGoalPlanMonth+'-15T12:00');d.setFullYear(d.getFullYear()+(+button.dataset.goalYear||0));stitchGoalPlanMonth=monthKey(d);render()});
  $$('[data-goal-plan-month]').forEach(button=>button.onclick=()=>{stitchGoalPlanMonth=button.dataset.goalPlanMonth;render()});
+ $$('[data-goal-deposit-month]').forEach(button=>button.onclick=()=>openGoalDeposit(db.goals.find(g=>g.id===button.dataset.id),button.dataset.goalDepositMonth));
  stitchBindCommon()
 };
 
