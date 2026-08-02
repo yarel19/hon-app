@@ -132,10 +132,10 @@ function stitchForecastCard(month=selectedMonth){
 dashboard=function(){
  heading('סקירה','תמונה קצרה וברורה של החודש');
  let currentMonth=monthKey();ensureMonthlyOpeningBalances(currentMonth);
- let bankNow=subtypeBalance('bank'),cashNow=subtypeBalance('cash'),bankOpening=monthlyOpeningBalance('bank',currentMonth),cashOpening=monthlyOpeningBalance('cash',currentMonth),bankDelta=monthlyBalanceChange('bank',currentMonth),cashDelta=monthlyBalanceChange('cash',currentMonth),combinedDelta=roundBudgetAmount(bankDelta+cashDelta),openingMonth=new Date(currentMonth+'-15T12:00:00').toLocaleDateString('he-IL',{month:'long'}),net=liveAssets()-liveLiabilities(),change=stitchNetChange(net),t=totals(currentMonth),out=t.expense+t.saving+t.debt,remaining=t.income-out,max=Math.max(1,t.income,out),recent=[...db.transactions].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,4),advice=professionalInsights(currentMonth).slice(0,2),wallets=db.wallets.slice(0,2);
+ let bankNow=subtypeBalance('bank'),cashNow=subtypeBalance('cash'),bankOpening=monthlyOpeningBalance('bank',currentMonth),cashOpening=monthlyOpeningBalance('cash',currentMonth),bankDelta=monthlyBalanceChange('bank',currentMonth),cashDelta=monthlyBalanceChange('cash',currentMonth),combinedDelta=roundBudgetAmount(bankDelta+cashDelta),openingMonth=new Date(currentMonth+'-15T12:00:00').toLocaleDateString('he-IL',{month:'long'}),net=liveAssets()-liveLiabilities(),change=stitchNetChange(net),t=totals(currentMonth),out=t.expense+t.saving+t.debt,remaining=t.income-out,max=Math.max(1,t.income,out),currentRows=monthTx(currentMonth),incomeCount=currentRows.filter(x=>x.kind==='income').length,outCount=currentRows.filter(x=>['expense','saving','debt'].includes(x.kind)).length,recent=[...db.transactions].sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,4),advice=professionalInsights(currentMonth).slice(0,2),wallets=db.wallets.slice(0,2);
  let adviceHtml=advice.map((x,i)=>`<article class="stitch-advice-card ${i===1?'blue':''}"><span class="stitch-advice-icon">${stitchIcon(i===0?'restaurant':'savings')}</span><div class="stitch-advice-copy"><h3>${esc(x.title)}</h3>${x.text?`<p>${esc(x.text)}</p>`:''}${x.action?`<strong>${esc(x.action)}</strong>`:''}</div></article>`).join('');
  let walletHtml=wallets.map(w=>`<article class="stitch-wallet-compact" style="--wallet-color:${walletColor(w)}" data-action="editWallet" data-id="${w.id}"><span class="stitch-wallet-logo" style="--wallet-color:${walletColor(w)}">${walletInitial(w.walletType)}</span><span class="stitch-wallet-copy"><b>${esc(w.name||walletTypeName(w.walletType))}</b><small>${walletTypeName(w.walletType)}</small></span><strong dir="ltr">${money(w.balance)}</strong></article>`).join('');
- let trend=change==null?'נתונים חיים':`${change>=0?'+':'−'}${numberAmount(Math.abs(change))}% ↗`;
+ let trend=change==null?'נתונים חיים':`${change>=0?'+':'−'}${numberAmount(Math.abs(change))}% ↗`,monthLabel=new Date(currentMonth+'-15T12:00:00').toLocaleDateString('he-IL',{month:'long'}),flowStatus=remaining>=0?'מאזן חודשי חיובי':'מאזן חודשי שלילי';
  $('#view').innerHTML=`<section class="stitch-page stitch-dashboard">
   ${stitchMobileHeader('HON')}
   <header class="stitch-overview-heading">
@@ -144,7 +144,16 @@ dashboard=function(){
   <div class="stitch-dashboard-grid">
    <div class="stitch-dashboard-main">
     <article class="stitch-net-hero ${change!=null&&change<0?'declining':''}"><small>הון נקי</small><strong>${money(net)}</strong><div class="stitch-net-trend"><b dir="ltr">${trend}</b><span>${change==null?'מתעדכן מכל הנכסים והחובות':'לעומת החודש האחרון'}</span></div></article>
-    <article class="stitch-month-card">
+    <article class="stitch-overview-flow-card ${remaining<0?'negative':'positive'}" aria-label="הכנסות ויציאות החודש">
+     <header class="stitch-overview-flow-head"><div><small>תנועת הכסף - ${monthLabel}</small><h2>מה נכנס, מה יצא ומה נשאר</h2></div><span class="stitch-overview-flow-status">${stitchIcon(remaining>=0?'trending_up':'trending_down')} ${flowStatus}</span></header>
+     <div class="stitch-overview-flow-metrics">
+      <div class="income"><span class="stitch-overview-flow-icon">${stitchIcon('south_west')}</span><div><small>נכנס החודש</small><strong dir="ltr">${money(t.income)}</strong><em>${incomeCount} ${incomeCount===1?'תנועת הכנסה':'תנועות הכנסה'}</em></div></div>
+      <div class="out"><span class="stitch-overview-flow-icon">${stitchIcon('north_east')}</span><div><small>יצא החודש</small><strong dir="ltr">${money(out)}</strong><em>${outCount} תנועות - כולל חיסכון וחובות</em></div></div>
+      <div class="balance"><span class="stitch-overview-flow-icon">${stitchIcon('account_balance_wallet')}</span><div><small>נשאר לניהול</small><strong dir="ltr">${signedMoney(remaining)}</strong><em>${remaining>=0?'יותר נכנס משיצא':'יותר יצא משנכנס'}</em></div></div>
+     </div>
+     <div class="stitch-overview-flow-track" aria-hidden="true"><i class="income" style="--flow-size:${Math.min(100,t.income/max*100)}%"></i><i class="out" style="--flow-size:${Math.min(100,out/max*100)}%"></i></div>
+    </article>
+    <article class="stitch-month-card stitch-mobile-overview-month">
      <div class="stitch-month-head"><span class="stitch-month-icon">${stitchIcon('calendar_month')}</span><div><small>החודש הנוכחי</small><h2>סיכום חודש ${new Date(monthKey()+'-15').toLocaleDateString('he-IL',{month:'long'})}</h2></div></div>
      <div class="stitch-month-line income"><span>הכנסות</span><strong>${money(t.income)}</strong><div class="stitch-line-progress"><i style="width:${Math.min(100,t.income/max*100)}%"></i></div></div>
      <div class="stitch-month-line out"><span>הוצאות / חיסכון / חובות</span><strong>${money(out)}</strong><div class="stitch-line-progress"><i style="width:${Math.min(100,out/max*100)}%"></i></div></div>
@@ -152,14 +161,14 @@ dashboard=function(){
     </article>
     <section class="stitch-activity-section"><div class="stitch-section-title"><h2>פעילות אחרונה</h2><div class="stitch-section-actions"><button type="button" class="stitch-section-link" data-page="cashflow">כל הפעולות ${stitchIcon('chevron_left')}</button><button type="button" class="stitch-add-circle" data-action="addTx" aria-label="הוספת תנועה">${stitchIcon('add')}</button></div></div><div class="stitch-activity-card">${recent.length?recent.map(x=>stitchTxRow(x)).join(''):empty('＋','מתחילים מכאן','הוסף תנועה ראשונה')}</div></section>
    </div>
-   <div class="stitch-dashboard-rail" role="complementary" aria-label="יתרות, המלצות וארנקים">
+   <div class="stitch-dashboard-rail" role="complementary" aria-label="יתרות והמלצות">
     <div class="stitch-balance-grid">
      <button type="button" class="stitch-balance-card bank" data-action="correctBank"><span class="stitch-balance-icon">${stitchIcon('account_balance')}</span><span class="stitch-balance-copy"><small>עו״ש עכשיו</small><strong dir="ltr">${money(bankNow)}</strong><span class="stitch-balance-monthly"><span><small>בתחילת ${openingMonth}</small><b dir="ltr">${money(bankOpening)}</b></span>${stitchMonthlyBalanceDelta(bankDelta)}</span></span><span class="stitch-balance-edit" aria-hidden="true">${stitchIcon('edit')}</span></button>
      <button type="button" class="stitch-balance-card cash" data-action="correctCash"><span class="stitch-balance-icon">${stitchIcon('payments')}</span><span class="stitch-balance-copy"><small>מזומן נגיש</small><strong dir="ltr">${money(cashNow)}</strong><span class="stitch-balance-monthly"><span><small>בתחילת ${openingMonth}</small><b dir="ltr">${money(cashOpening)}</b></span>${stitchMonthlyBalanceDelta(cashDelta)}</span></span><span class="stitch-balance-edit" aria-hidden="true">${stitchIcon('edit')}</span></button>
      <div class="stitch-opening-summary ${combinedDelta>0.009?'up':combinedDelta<-.009?'down':'neutral'}"><span>${stitchCombinedBalanceText(combinedDelta)}</span><button type="button" data-action="correctOpeningBalances">תיקון יתרות פתיחה</button></div>
     </div>
     <section class="stitch-advice-section">${stitchSectionTitle('הצעות ייעול') }<div class="stitch-advice-grid">${adviceHtml||'<p class="muted">לאחר הוספת תנועות יוצגו כאן המלצות.</p>'}</div></section>
-    <section class="stitch-wallet-section">${stitchSectionTitle('ארנקים דיגיטליים','נהל הכל','wallets')}<div class="stitch-wallet-compact-list">${walletHtml||'<p class="muted">עוד לא נוספו ארנקים.</p>'}</div></section>
+    <section class="stitch-wallet-section stitch-mobile-overview-wallets">${stitchSectionTitle('ארנקים דיגיטליים','נהל הכל','wallets')}<div class="stitch-wallet-compact-list">${walletHtml||'<p class="muted">עוד לא נוספו ארנקים.</p>'}</div></section>
    </div>
    <section class="stitch-overview-forecast" aria-label="תחזית לסוף החודש">${stitchForecastCard(currentMonth)}</section>
   </div>

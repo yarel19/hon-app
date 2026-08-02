@@ -2984,3 +2984,126 @@ body.stitch-app>aside{
 .stitch-goal-month-parts>div.complete span em{color:var(--st-primary)}
 .stitch-goal-month-parts>div.partial span em{color:#9a7022}
 .dark .stitch-goal-deposit-state.partial{background:#352f20;color:#e4c26e}
+
+/* HON v37 - premium, compact desktop overview language */
+.stitch-overview-flow-card{display:none}
+
+@media(min-width:821px){
+ .stitch-dashboard{--overview-radius:18px;--overview-border:rgba(188,202,193,.34)}
+ .stitch-dashboard .stitch-overview-heading{
+  justify-content:center!important;margin:0 auto 18px!important;text-align:center!important;
+ }
+ .stitch-dashboard .stitch-overview-heading>div{width:min(760px,100%)}
+ .stitch-dashboard .stitch-overview-heading h1{font-size:29px;letter-spacing:-.35px}
+ .stitch-dashboard .stitch-overview-heading p{margin-top:5px;font-size:11px;letter-spacing:.01em}
+ .stitch-dashboard .stitch-mobile-overview-month,
+ .stitch-dashboard .stitch-mobile-overview-wallets{display:none!important}
+ .stitch-overview-flow-card{
+  position:relative;display:block;overflow:hidden;min-width:0;padding:19px 20px 15px;
+  border:1px solid var(--overview-border);border-radius:var(--overview-radius);
+  background:linear-gradient(145deg,color-mix(in srgb,var(--st-surface) 96%,var(--st-primary-soft)),var(--st-surface));
+  box-shadow:0 11px 30px rgba(28,55,64,.065);
+ }
+ .stitch-overview-flow-card:before{
+  content:"";position:absolute;inset:0 0 auto;height:3px;
+  background:linear-gradient(90deg,var(--st-gold),var(--st-primary),var(--st-blue));
+ }
+ .stitch-overview-flow-head{display:flex;align-items:center;justify-content:space-between;gap:18px;margin-bottom:14px}
+ .stitch-overview-flow-head>div{min-width:0}
+ .stitch-overview-flow-head small{display:block;color:var(--st-primary);font-size:8.5px;font-weight:850}
+ .stitch-overview-flow-head h2{margin:3px 0 0;color:var(--st-ink);font-size:17px;line-height:1.25}
+ .stitch-overview-flow-status{
+  display:inline-flex;align-items:center;gap:5px;padding:7px 10px;border-radius:999px;
+  background:var(--st-primary-soft);color:var(--st-primary);font-size:8.5px;font-weight:850;white-space:nowrap;
+ }
+ .stitch-overview-flow-card.negative .stitch-overview-flow-status{background:var(--st-red-soft);color:var(--st-red)}
+ .stitch-overview-flow-status .material-symbols-outlined{font-size:15px}
+ .stitch-overview-flow-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+ .stitch-overview-flow-metrics>div{
+  display:grid;grid-template-columns:34px minmax(0,1fr);align-items:center;gap:9px;min-width:0;
+  padding:12px;border:1px solid color-mix(in srgb,var(--metric-color) 13%,var(--st-mid));border-radius:13px;
+  background:color-mix(in srgb,var(--metric-color) 5%,var(--st-surface));
+ }
+ .stitch-overview-flow-metrics .income{--metric-color:var(--st-teal)}
+ .stitch-overview-flow-metrics .out{--metric-color:var(--st-red)}
+ .stitch-overview-flow-metrics .balance{--metric-color:var(--st-blue)}
+ .stitch-overview-flow-card.negative .stitch-overview-flow-metrics .balance{--metric-color:var(--st-red)}
+ .stitch-overview-flow-icon{
+  width:34px;height:34px;display:grid;place-items:center;border-radius:10px;
+  background:color-mix(in srgb,var(--metric-color) 12%,var(--st-surface));color:var(--metric-color);
+ }
+ .stitch-overview-flow-icon .material-symbols-outlined{font-size:18px}
+ .stitch-overview-flow-metrics div>div{min-width:0}
+ .stitch-overview-flow-metrics small,.stitch-overview-flow-metrics strong,.stitch-overview-flow-metrics em{display:block}
+ .stitch-overview-flow-metrics small{color:var(--st-muted);font-size:8px;font-weight:750}
+ .stitch-overview-flow-metrics strong{
+  margin-top:2px;color:var(--metric-color);font-size:17px;line-height:1.25;text-align:right;
+  font-variant-numeric:tabular-nums;unicode-bidi:isolate;white-space:nowrap;
+ }
+ .stitch-overview-flow-metrics em{
+  overflow:hidden;margin-top:2px;color:var(--st-muted);font-size:7px;font-style:normal;
+  font-weight:650;text-overflow:ellipsis;white-space:nowrap;
+ }
+ .stitch-overview-flow-track{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:11px}
+ .stitch-overview-flow-track:before,.stitch-overview-flow-track:after{
+  content:"";grid-row:1;height:4px;border-radius:99px;background:var(--st-low);
+ }
+ .stitch-overview-flow-track i{grid-row:1;z-index:1;width:var(--flow-size);height:4px;border-radius:99px}
+ .stitch-overview-flow-track i.income{grid-column:1;background:linear-gradient(90deg,var(--st-primary),var(--st-teal))}
+ .stitch-overview-flow-track i.out{grid-column:2;background:linear-gradient(90deg,var(--st-red),#ef7f88)}
+ .stitch-dashboard .stitch-net-hero{
+  min-height:158px;padding:23px 26px;border-radius:var(--overview-radius);
+  background:radial-gradient(circle at 4% 105%,rgba(64,208,157,.18),transparent 38%),linear-gradient(135deg,#102d34,#0c2026);
+  box-shadow:0 17px 40px rgba(12,36,43,.14);
+ }
+ .stitch-dashboard .stitch-net-hero:before{
+  content:"";position:absolute;inset:0 0 auto;height:2px;
+  background:linear-gradient(90deg,var(--st-gold),#56d3aa,var(--st-blue));opacity:.9;
+ }
+ .stitch-dashboard .stitch-net-hero strong{font-size:38px}
+ .stitch-dashboard .stitch-net-trend{margin-top:15px}
+ .stitch-dashboard .stitch-balance-card{
+  min-height:105px;border:1px solid var(--overview-border);border-radius:15px;
+  box-shadow:0 9px 26px rgba(29,55,65,.055);
+ }
+ .stitch-dashboard .stitch-opening-summary{min-height:40px;border-radius:11px}
+ .stitch-dashboard .stitch-advice-card{border-radius:15px;box-shadow:0 8px 24px rgba(29,55,65,.05)}
+ .stitch-dashboard .stitch-activity-card{
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));border-radius:var(--overview-radius);
+  box-shadow:0 9px 28px rgba(29,55,65,.055);
+ }
+ .stitch-dashboard .stitch-activity-row{min-height:62px;border-bottom:1px solid var(--st-low)}
+ .stitch-dashboard .stitch-activity-row:nth-child(odd){border-left:1px solid var(--st-low)}
+ .stitch-dashboard .stitch-activity-row:nth-last-child(-n+2){border-bottom:0}
+ .stitch-dashboard .stitch-overview-forecast{margin-top:0}
+ .stitch-dashboard .stitch-forecast-luxury{border-radius:var(--overview-radius)}
+ .stitch-overview-flow-card{animation:stitchRise .42s .06s cubic-bezier(.2,.72,.2,1) both}
+ .dark .stitch-overview-flow-card{
+  border-color:var(--st-high);background:linear-gradient(145deg,color-mix(in srgb,var(--st-surface) 94%,var(--st-primary-soft)),var(--st-surface));
+ }
+ .dark .stitch-overview-flow-metrics>div{background:color-mix(in srgb,var(--metric-color) 8%,var(--st-surface))}
+}
+
+@media(min-width:1101px){
+ .stitch-dashboard .stitch-dashboard-grid{
+  grid-template-columns:minmax(0,2.15fr) minmax(315px,.85fr);gap:16px;
+ }
+ .stitch-dashboard .stitch-dashboard-main,.stitch-dashboard .stitch-dashboard-rail{gap:14px}
+ .stitch-dashboard .stitch-dashboard-main{grid-template-columns:minmax(0,1fr)}
+ .stitch-dashboard .stitch-dashboard-rail{grid-template-columns:minmax(0,1fr)}
+ .stitch-dashboard .stitch-balance-grid{gap:9px}
+ .stitch-dashboard .stitch-advice-grid{gap:8px}
+ .stitch-dashboard .stitch-advice-card{padding:11px 12px}
+ .stitch-dashboard .stitch-advice-card p{display:none}
+ .stitch-dashboard .stitch-advice-card strong{margin-top:4px}
+}
+
+@media(min-width:821px) and (max-width:1100px){
+ .stitch-dashboard .stitch-dashboard-grid{
+  grid-template-areas:"hero hero" "balances balances" "flow flow" "advice advice" "activity activity";
+  gap:15px;
+ }
+ .stitch-dashboard .stitch-overview-flow-card{grid-area:flow}
+ .stitch-dashboard .stitch-balance-grid{grid-template-columns:repeat(2,minmax(0,1fr));grid-template-rows:auto auto}
+ .stitch-dashboard .stitch-advice-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
