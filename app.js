@@ -29,7 +29,7 @@ const categoryIconCatalog=[
 const fixedExpenseWords=['שכר דירה','שכירות','משכנתא','ארנונה','ועד בית','ביטוח','הלוואה','חשבון','חשבונות','חשמל','מים','גז','גן','גנים','מעון','צהרון','אינטרנט','טלפון','סלולר','מנוי'];
 
 const defaults={
- version:22,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],budgetChangeLog:[],budgetFlexTransfers:[],monthlyOpeningBalances:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
+ version:23,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],budgetChangeLog:[],budgetFlexTransfers:[],monthlyOpeningBalances:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
  settings:{name:'יראל',currency:'ILS',onboarded:false,budgetSort:'manual'},
 };
 const defaultCategories=[
@@ -65,7 +65,7 @@ function categoryIconName(c={}){
  return'receipt_long'
 }
 function migrate(raw){
- let d={...structuredClone(defaults),...(raw||{})};
+ let d={...structuredClone(defaults),...(raw||{})},sourceVersion=Number(raw?.version)||0;
  for(const k of ['transactions','accounts','wallets','categories','budgets','budgetChangeLog','budgetFlexTransfers','monthlyOpeningBalances','monthPlans','goals','debts','recurring','snapshots','reviews'])if(!Array.isArray(d[k]))d[k]=[];
  if(!d.categories.length)d.categories=defaultCategories;
  d.settings={...defaults.settings,...(d.settings||{})};
@@ -82,9 +82,9 @@ function migrate(raw){
  d.goals=d.goals.map(g=>{let hadNewSchedule=!!(g.startMonth||g.deadlineMonth),startMonth=g.startMonth||monthKey(),deadlineMonth=g.deadlineMonth||(g.date||'').slice(0,7),term=g.term||(monthsInclusive(startMonth,deadlineMonth)&&monthsInclusive(startMonth,deadlineMonth)<=24?'short':'long'),target=+g.target||0,current=+g.current||0,calculationMode=g.calculationMode||(hadNewSchedule?'auto':'manual'),monthly=+g.monthly||0;if(!monthly&&target>current){let effectiveStart=monthOrdinal(monthKey())>monthOrdinal(startMonth)?monthKey():startMonth,count=monthsInclusive(effectiveStart,deadlineMonth);monthly=count?Math.round((target-current)/count*100)/100:0}let initialMonthly=Math.max(0,migrationRound(g.initialMonthly||monthly)),monthlyPlanHistory=Array.isArray(g.monthlyPlanHistory)?g.monthlyPlanHistory.map(x=>({...x,effectiveMonth:x.effectiveMonth||startMonth,amount:Math.max(0,migrationRound(x.amount)),createdAt:x.createdAt||migrationTime})).filter(x=>/^\d{4}-\d{2}$/.test(x.effectiveMonth||'')):[];if(!monthlyPlanHistory.length&&initialMonthly)monthlyPlanHistory.push({effectiveMonth:startMonth,amount:initialMonthly,reason:'initial',createdAt:g.planLockedAt||migrationTime});return{...g,target,current,monthly:Math.max(0,migrationRound(monthly)),initialMonthly,monthlyPlanHistory,startMonth,deadlineMonth,calculationMode,moneyLocation:g.moneyLocation||'',linkedAccountId:g.linkedAccountId||'',term,completedMonth:g.completedMonth||''}});
  d.transactions=d.transactions.map(t=>{let linked=d.goals.find(g=>g.id===t.goalId);if(!linked&&t.kind==='saving'){let note=String(t.note||'').trim();linked=d.goals.find(g=>note===`הפקדה: ${g.name}`||note===`הפקדה למטרה: ${g.name}`)}return linked?{...t,goalId:linked.id,goalDeposit:true,goalAccountId:t.goalAccountId||'',note:`הפקדה למטרה: ${linked.name}`}:{...t,goalDeposit:!!t.goalDeposit,goalAccountId:t.goalAccountId||''}});
  d.snapshots=d.snapshots.map(s=>({...s,openingNet:s.openingNet==null?null:migrationRound(s.openingNet),autoUpdatedAt:s.autoUpdatedAt||''}));
- d.reviews=d.reviews.map(r=>({...r,categoryAssessments:Array.isArray(r.categoryAssessments)?r.categoryAssessments.map(x=>({...x,rating:['excellent','improve','extreme'].includes(x.rating)?x.rating:'',note:String(x.note||'')})).filter(x=>x.category):[]}));
+ d.reviews=d.reviews.map(r=>({...r,categoryAssessments:Array.isArray(r.categoryAssessments)?r.categoryAssessments.map(x=>{let rating=['excellent','improve','extreme'].includes(x.rating)?x.rating:'';return{...x,rating,note:String(x.note||''),completed:typeof x.completed==='boolean'?x.completed:sourceVersion<23&&!!rating,completedAt:x.completedAt||''}}).filter(x=>x.category):[]}));
  d.goals.forEach(g=>{if(g.target>0&&g.current>=g.target){let latest=d.transactions.filter(t=>t.goalDeposit&&t.goalId===g.id&&t.date).sort((a,b)=>a.date.localeCompare(b.date)).at(-1);g.completedMonth=g.completedMonth||latest?.date?.slice(0,7)||monthKey()}else g.completedMonth=''});
- d.version=22;return d
+ d.version=23;return d
 }
 let db=migrate(JSON.parse(localStorage.getItem('honSheli')||'null')),current='dashboard',selectedMonth=monthKey(),flowView='transactions',deferredInstall;
 const persist=(cloud=true)=>{syncCurrentHistorySnapshot();localStorage.setItem('honSheli',JSON.stringify(db));if(cloud)window.HONCloud?.queueSync(db)};

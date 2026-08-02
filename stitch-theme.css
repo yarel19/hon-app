@@ -3282,3 +3282,30 @@ body.stitch-app>aside{
  .stitch-category-assessment-icon{width:42px;height:42px}
  .stitch-category-rating span b{font-size:9px}
 }
+
+/* HON v44 - explicit category completion */
+.stitch-category-assessment-footer{display:flex;justify-content:flex-end;margin-top:12px;padding-top:11px;border-top:1px solid var(--st-mid)}
+.stitch-category-finish{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-width:112px;min-height:40px;padding:8px 16px;border:0;border-radius:11px;background:linear-gradient(135deg,var(--st-primary),color-mix(in srgb,var(--st-primary) 76%,#0b4f48));color:#fff;font:inherit;font-size:11px;font-weight:900;box-shadow:0 8px 20px color-mix(in srgb,var(--st-primary) 20%,transparent);cursor:pointer;transition:transform .18s ease,box-shadow .18s ease}
+.stitch-category-finish:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 11px 24px color-mix(in srgb,var(--st-primary) 27%,transparent)}
+.stitch-category-finish .material-symbols-outlined{font-size:18px}
+.stitch-category-assessment-card.completed{order:2;border-color:#26383d!important;background:linear-gradient(145deg,#111a1d,#070c0e)!important;color:#f6fbfa;box-shadow:0 14px 34px rgba(3,12,15,.24)}
+.stitch-category-assessment-card.completed:before{background:linear-gradient(180deg,#54deb8,#159a75)}
+.stitch-category-assessment-card.completed h3,.stitch-category-assessment-card.completed .stitch-category-assessment-head-actions>strong{color:#fff}
+.stitch-category-assessment-card.completed header p,.stitch-category-assessment-card.completed header p.over{color:#9ce5d1}
+.stitch-category-assessment-card.completed .stitch-category-assessment-icon{background:rgba(84,222,184,.13);color:#63dfbd}
+.stitch-category-assessment-card.completed .stitch-category-assessment-head-actions>button{border-color:rgba(99,223,189,.24);background:rgba(99,223,189,.1);color:#8ee6cd}
+.stitch-category-assessment-card.completed .stitch-category-assessment-facts span{background:rgba(255,255,255,.065)}
+.stitch-category-assessment-card.completed .stitch-category-assessment-facts small,.stitch-category-assessment-card.completed legend,.stitch-category-assessment-card.completed .stitch-category-note>span small{color:#a9b9bc!important}
+.stitch-category-assessment-card.completed .stitch-category-assessment-facts b,.stitch-category-assessment-card.completed .stitch-category-note>span{color:#f4f8f8}
+.stitch-category-assessment-card.completed .stitch-category-rating span{border-color:rgba(255,255,255,.15);background:rgba(255,255,255,.055);color:#bdc9cb}
+.stitch-category-assessment-card.completed .stitch-category-rating label.excellent input:checked+span{border-color:rgba(99,223,189,.46);background:rgba(46,170,137,.2);color:#76e4c5}
+.stitch-category-assessment-card.completed .stitch-category-rating label.improve input:checked+span{border-color:rgba(234,188,91,.48);background:rgba(194,138,35,.2);color:#f0c66d}
+.stitch-category-assessment-card.completed .stitch-category-rating label.extreme input:checked+span{border-color:rgba(245,108,120,.48);background:rgba(199,56,70,.2);color:#ff9aa4}
+.stitch-category-assessment-card.completed .stitch-category-note textarea{border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.07);color:#f7fbfa}
+.stitch-category-assessment-card.completed .stitch-category-note textarea::placeholder{color:#91a2a5}
+.stitch-category-assessment-card.completed .stitch-category-assessment-footer{border-top-color:rgba(255,255,255,.12)}
+.stitch-category-assessment-card.completed .stitch-category-finish:disabled{background:rgba(99,223,189,.14);color:#87e4ca;box-shadow:none;opacity:1;cursor:default}
+@media(max-width:820px){
+ .stitch-category-assessment-footer{margin-top:13px}
+ .stitch-category-finish{width:100%;min-height:44px;font-size:12px}
+}
