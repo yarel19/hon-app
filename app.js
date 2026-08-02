@@ -29,7 +29,7 @@ const categoryIconCatalog=[
 const fixedExpenseWords=['שכר דירה','שכירות','משכנתא','ארנונה','ועד בית','ביטוח','הלוואה','חשבון','חשבונות','חשמל','מים','גז','גן','גנים','מעון','צהרון','אינטרנט','טלפון','סלולר','מנוי'];
 
 const defaults={
- version:21,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],budgetChangeLog:[],budgetFlexTransfers:[],monthlyOpeningBalances:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
+ version:22,transactions:[],accounts:[],wallets:[],categories:[],budgets:[],budgetChangeLog:[],budgetFlexTransfers:[],monthlyOpeningBalances:[],monthPlans:[],ironBudget:{income:0,categories:[]},goals:[],debts:[],recurring:[],snapshots:[],reviews:[],
  settings:{name:'יראל',currency:'ILS',onboarded:false,budgetSort:'manual'},
 };
 const defaultCategories=[
@@ -81,12 +81,13 @@ function migrate(raw){
  d.ironBudget=d.ironBudget&&Array.isArray(d.ironBudget.categories)?d.ironBudget:{income:0,categories:[]};
  d.goals=d.goals.map(g=>{let hadNewSchedule=!!(g.startMonth||g.deadlineMonth),startMonth=g.startMonth||monthKey(),deadlineMonth=g.deadlineMonth||(g.date||'').slice(0,7),term=g.term||(monthsInclusive(startMonth,deadlineMonth)&&monthsInclusive(startMonth,deadlineMonth)<=24?'short':'long'),target=+g.target||0,current=+g.current||0,calculationMode=g.calculationMode||(hadNewSchedule?'auto':'manual'),monthly=+g.monthly||0;if(!monthly&&target>current){let effectiveStart=monthOrdinal(monthKey())>monthOrdinal(startMonth)?monthKey():startMonth,count=monthsInclusive(effectiveStart,deadlineMonth);monthly=count?Math.round((target-current)/count*100)/100:0}let initialMonthly=Math.max(0,migrationRound(g.initialMonthly||monthly)),monthlyPlanHistory=Array.isArray(g.monthlyPlanHistory)?g.monthlyPlanHistory.map(x=>({...x,effectiveMonth:x.effectiveMonth||startMonth,amount:Math.max(0,migrationRound(x.amount)),createdAt:x.createdAt||migrationTime})).filter(x=>/^\d{4}-\d{2}$/.test(x.effectiveMonth||'')):[];if(!monthlyPlanHistory.length&&initialMonthly)monthlyPlanHistory.push({effectiveMonth:startMonth,amount:initialMonthly,reason:'initial',createdAt:g.planLockedAt||migrationTime});return{...g,target,current,monthly:Math.max(0,migrationRound(monthly)),initialMonthly,monthlyPlanHistory,startMonth,deadlineMonth,calculationMode,moneyLocation:g.moneyLocation||'',linkedAccountId:g.linkedAccountId||'',term,completedMonth:g.completedMonth||''}});
  d.transactions=d.transactions.map(t=>{let linked=d.goals.find(g=>g.id===t.goalId);if(!linked&&t.kind==='saving'){let note=String(t.note||'').trim();linked=d.goals.find(g=>note===`הפקדה: ${g.name}`||note===`הפקדה למטרה: ${g.name}`)}return linked?{...t,goalId:linked.id,goalDeposit:true,goalAccountId:t.goalAccountId||'',note:`הפקדה למטרה: ${linked.name}`}:{...t,goalDeposit:!!t.goalDeposit,goalAccountId:t.goalAccountId||''}});
+ d.snapshots=d.snapshots.map(s=>({...s,openingNet:s.openingNet==null?null:migrationRound(s.openingNet),autoUpdatedAt:s.autoUpdatedAt||''}));
  d.reviews=d.reviews.map(r=>({...r,categoryAssessments:Array.isArray(r.categoryAssessments)?r.categoryAssessments.map(x=>({...x,rating:['excellent','improve','extreme'].includes(x.rating)?x.rating:'',note:String(x.note||'')})).filter(x=>x.category):[]}));
  d.goals.forEach(g=>{if(g.target>0&&g.current>=g.target){let latest=d.transactions.filter(t=>t.goalDeposit&&t.goalId===g.id&&t.date).sort((a,b)=>a.date.localeCompare(b.date)).at(-1);g.completedMonth=g.completedMonth||latest?.date?.slice(0,7)||monthKey()}else g.completedMonth=''});
- d.version=21;return d
+ d.version=22;return d
 }
 let db=migrate(JSON.parse(localStorage.getItem('honSheli')||'null')),current='dashboard',selectedMonth=monthKey(),flowView='transactions',deferredInstall;
-const persist=(cloud=true)=>{localStorage.setItem('honSheli',JSON.stringify(db));if(cloud)window.HONCloud?.queueSync(db)};
+const persist=(cloud=true)=>{syncCurrentHistorySnapshot();localStorage.setItem('honSheli',JSON.stringify(db));if(cloud)window.HONCloud?.queueSync(db)};
 const save=(message='נשמר בהצלחה')=>{persist();render();if(message)toast(message)};
 const cat=id=>db.categories.find(c=>c.id===id)||{name:'ללא קטגוריה',color:'#7b8794',kind:'expense'};
 const account=id=>db.accounts.find(a=>a.id===id)||{name:'ללא חשבון'};
@@ -549,11 +550,37 @@ function availableHistoryMonths(){
  return months
 }
 function monthlyHistoryData(m){
- let totalsForMonth=totals(m),out=roundBudgetAmount(totalsForMonth.expense+totalsForMonth.saving+totalsForMonth.debt),result=roundBudgetAmount(totalsForMonth.income-out),bank=historicalSubtypeBalances('bank',m),cash=historicalSubtypeBalances('cash',m),categories=monthlyCategoryStats(m),snapshot=db.snapshots.find(x=>x.month===m),review=db.reviews.find(x=>x.month===m),opening=roundBudgetAmount(bank.start+cash.start),closing=roundBudgetAmount(bank.end+cash.end);
- return{month:m,totals:totalsForMonth,out,expenseOnly:roundBudgetAmount(totalsForMonth.expense),result,bank,cash,opening,closing,liquidChange:roundBudgetAmount(closing-opening),categories,snapshot,review,transactionCount:monthTx(m).length,savingsRate:totalsForMonth.income?roundBudgetAmount(totalsForMonth.saving/totalsForMonth.income*100):0,topCategory:categories[0]||null}
+ let totalsForMonth=totals(m),out=roundBudgetAmount(totalsForMonth.expense+totalsForMonth.saving+totalsForMonth.debt),result=roundBudgetAmount(totalsForMonth.income-out),bank=historicalSubtypeBalances('bank',m),cash=historicalSubtypeBalances('cash',m),categories=monthlyCategoryStats(m),snapshot=db.snapshots.find(x=>x.month===m),review=db.reviews.find(x=>x.month===m),opening=roundBudgetAmount(bank.start+cash.start),closing=roundBudgetAmount(bank.end+cash.end),netWorth=monthlyNetWorthData(m);
+ return{month:m,totals:totalsForMonth,out,expenseOnly:roundBudgetAmount(totalsForMonth.expense),result,bank,cash,opening,closing,liquidChange:roundBudgetAmount(closing-opening),netWorth,categories,snapshot,review,transactionCount:monthTx(m).length,topCategory:categories[0]||null}
 }
 function liveAssets(){return db.accounts.filter(a=>a.type==='asset').reduce((s,a)=>s+effectiveBalance(a),0)}
 function liveLiabilities(){return db.accounts.filter(a=>a.type==='liability').reduce((s,a)=>s+a.balance,0)}
+function transactionNetWorthMovement(t){
+ let amount=+t.amount||0,movement=0,source=db.accounts.find(a=>a.type==='asset'&&a.id===t.account),target=db.accounts.find(a=>a.type==='asset'&&a.id===t.toAccount),goalTarget=t.goalDeposit?db.accounts.find(a=>a.type==='asset'&&a.id===t.goalAccountId):null;
+ const afterCutoff=a=>!!(a&&t.createdAt&&t.createdAt>(a.balanceAsOf||''));
+ if(t.kind==='transfer'){
+  if(afterCutoff(source))movement-=amount;
+  if(afterCutoff(target))movement+=amount
+ }else{
+  if(afterCutoff(source))movement+=t.kind==='income'?amount:-amount;
+  if(afterCutoff(goalTarget))movement+=amount
+ }
+ return roundBudgetAmount(movement)
+}
+function netWorthMovementForMonth(m){return roundBudgetAmount(monthTx(m).reduce((sum,t)=>sum+transactionNetWorthMovement(t),0))}
+function netWorthMovementAfterMonth(m){return roundBudgetAmount(db.transactions.filter(t=>(t.date||'').slice(0,7)>m).reduce((sum,t)=>sum+transactionNetWorthMovement(t),0))}
+function monthlyNetWorthData(m){
+ let now=monthKey(),liveNet=roundBudgetAmount(liveAssets()-liveLiabilities()),snapshot=db.snapshots.find(s=>s.month===m),previous=[...db.snapshots].filter(s=>s.month<m&&Number.isFinite(+s.net)).sort((a,b)=>a.month.localeCompare(b.month)).at(-1),closing;
+ if(m===now)closing=liveNet;
+ else if(snapshot&&Number.isFinite(+snapshot.net))closing=roundBudgetAmount(snapshot.net);
+ else closing=roundBudgetAmount(liveNet-netWorthMovementAfterMonth(m));
+ let opening=snapshot?.openingNet!=null&&Number.isFinite(+snapshot.openingNet)?roundBudgetAmount(snapshot.openingNet):previous&&Number.isFinite(+previous.net)?roundBudgetAmount(previous.net):roundBudgetAmount(closing-netWorthMovementForMonth(m));
+ return{opening,closing,change:roundBudgetAmount(closing-opening),live:m===now,frozen:m<now&&!!snapshot}
+}
+function syncCurrentHistorySnapshot(){
+ let m=monthKey(),assets=roundBudgetAmount(liveAssets()),liabilities=roundBudgetAmount(liveLiabilities()),net=roundBudgetAmount(assets-liabilities),existing=db.snapshots.find(s=>s.month===m),previous=[...db.snapshots].filter(s=>s.month<m&&Number.isFinite(+s.net)).sort((a,b)=>a.month.localeCompare(b.month)).at(-1),storedBank=db.monthlyOpeningBalances.find(x=>x.month===m&&x.type==='bank'),storedCash=db.monthlyOpeningBalances.find(x=>x.month===m&&x.type==='cash'),openingNet=existing?.openingNet!=null&&Number.isFinite(+existing.openingNet)?roundBudgetAmount(existing.openingNet):previous&&Number.isFinite(+previous.net)?roundBudgetAmount(previous.net):roundBudgetAmount(net-netWorthMovementForMonth(m)),totalsForMonth=totals(m),out=roundBudgetAmount(totalsForMonth.expense+totalsForMonth.saving+totalsForMonth.debt),values={assets,liabilities,net,openingNet,bank:roundBudgetAmount(subtypeBalance('bank')),cash:roundBudgetAmount(subtypeBalance('cash')),openingBank:roundBudgetAmount(existing?.openingBank??storedBank?.amount??inferredMonthlyOpeningBalance('bank',m)),openingCash:roundBudgetAmount(existing?.openingCash??storedCash?.amount??inferredMonthlyOpeningBalance('cash',m)),income:roundBudgetAmount(totalsForMonth.income),out,result:roundBudgetAmount(totalsForMonth.income-out),categories:monthlyCategoryStats(m),autoUpdatedAt:new Date().toISOString()};
+ if(existing)Object.assign(existing,values);else db.snapshots.push({month:m,...values})
+}
 function correctSubtype(type,label){
  let list=db.accounts.filter(a=>a.type==='asset'&&a.subtype===type);
  if(!list.length)return alert(`תחילה הוסף בהון העצמי חשבון מסוג ${label}.`);
@@ -630,7 +657,7 @@ function wealth(){
  $('#view').innerHTML=`<div class="grid stats"><div class="card stat"><small>נכסים</small><strong class="up">${money(liveAssets())}</strong></div><div class="card stat"><small>נכסים נזילים</small><strong class="up">${money(liquid)}</strong></div><div class="card stat"><small>התחייבויות</small><strong class="down">${money(liveLiabilities())}</strong></div><div class="card hero-card stat"><small>הון נקי</small><strong>${money(net)}</strong></div></div><div class="grid two section-space"><div class="card"><div class="card-head"><h3>חשבונות ונכסים</h3><button class="primary" data-action="addAccount">＋ חשבון</button></div><div class="account-table"><div class="account-head"><span>שם החשבון</span><span>נזילות</span><span>יתרה</span><span></span></div>${assets.map(accountRow).join('')||empty('◇','אין נכסים','הוסף עו״ש, חיסכון, השקעות או רכוש')}</div><h3 class="subhead">התחייבויות</h3><div class="account-table">${liabs.map(accountRow).join('')||'<p class="muted">אין התחייבויות רשומות</p>'}</div></div><div class="card"><div class="card-head"><div><h3>התקדמות ההון</h3><small class="muted">צילום מצב חודשי</small></div><button class="ghost" data-action="snapshot">שמירת החודש</button></div>${history.length?history.slice(-12).map((s,i)=>`<div class="row"><span>${monthName(s.month)}</span><b class="${i&&s.net>=history[i-1]?.net?'up':''}">${money(s.net)}</b></div>`).join(''):empty('▥','אין עדיין היסטוריה','שמור צילום מצב בסוף כל חודש')}</div></div>`
 }
 function accountRow(a){return `<div class="account-row"><div><b>${esc(a.name)}</b></div><span class="liquidity ${a.liquid?'liquid':'locked'}">${a.type==='liability'?'התחייבות':a.liquid?'נזיל':'לא נזיל'}</span><strong>${money(a.type==='asset'?effectiveBalance(a):a.balance)}</strong><button class="mini-btn" data-action="editAccount" data-id="${a.id}">עריכה</button></div>`}
-actions.snapshot=(id,notify=true)=>{let assets=liveAssets(),liabilities=liveLiabilities(),net=assets-liabilities,bank=historicalSubtypeBalances('bank',selectedMonth),cash=historicalSubtypeBalances('cash',selectedMonth),summary=monthlyHistoryData(selectedMonth),existing=db.snapshots.find(s=>s.month===selectedMonth),values={assets,liabilities,net,bank:bank.end,cash:cash.end,openingBank:bank.start,openingCash:cash.start,income:summary.totals.income,out:summary.out,result:summary.result,categories:summary.categories,capturedAt:new Date().toISOString()};if(existing)Object.assign(existing,values);else db.snapshots.push({month:selectedMonth,...values});persist();if(notify)save('צילום ההון נשמר')};
+actions.snapshot=(id,notify=true)=>{let assets=liveAssets(),liabilities=liveLiabilities(),net=assets-liabilities,bank=historicalSubtypeBalances('bank',selectedMonth),cash=historicalSubtypeBalances('cash',selectedMonth),summary=monthlyHistoryData(selectedMonth),existing=db.snapshots.find(s=>s.month===selectedMonth),values={assets,liabilities,net,openingNet:summary.netWorth.opening,bank:bank.end,cash:cash.end,openingBank:bank.start,openingCash:cash.start,income:summary.totals.income,out:summary.out,result:summary.result,categories:summary.categories,capturedAt:new Date().toISOString()};if(existing)Object.assign(existing,values);else db.snapshots.push({month:selectedMonth,...values});persist();if(notify)save('צילום ההון נשמר')};
 
 const walletTypeName=t=>({bit:'Bit',paybox:'פייבוקס',digital:'כרטיס דיגיטלי',fighter:'כרטיס אשראי פייטר',gift:'Gift Card',other:'אחר'}[t]||'אחר');
 function wallets(){

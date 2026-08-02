@@ -3198,3 +3198,21 @@ body.stitch-app>aside{
  .stitch-goal-month-part-actions button{min-width:92px}
  .stitch-goal-summary>div>span{font-size:8px}
 }
+
+/* HON v40 - continuously updated monthly net worth */
+.stitch-history-insights article.net-worth{
+ border-color:color-mix(in srgb,var(--st-primary) 28%,var(--st-mid));
+ background:linear-gradient(145deg,color-mix(in srgb,var(--st-primary-soft) 72%,var(--st-surface)),var(--st-surface));
+}
+.stitch-history-insights article.net-worth>span{background:var(--st-primary);color:#fff}
+.stitch-history-insights article.net-worth b{font-size:15px;color:var(--st-primary)}
+.stitch-history-insights article.net-worth strong.down{color:var(--st-red)}
+.stitch-history-insights article.net-worth strong.up{color:var(--st-primary)}
+
+@media(min-width:821px){
+ .stitch-history-insights{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));width:100%}
+}
+
+@media(max-width:820px){
+ .stitch-history-insights{grid-template-columns:1fr}
+}
