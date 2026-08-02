@@ -3309,3 +3309,9 @@ body.stitch-app>aside{
  .stitch-category-assessment-footer{margin-top:13px}
  .stitch-category-finish{width:100%;min-height:44px;font-size:12px}
 }
+
+/* HON v46 - mobile-only overview cleanup */
+@media(max-width:820px){
+ .stitch-dashboard .stitch-mobile-overview-wallets{display:none!important}
+ .stitch-dashboard .stitch-overview-forecast{order:7;width:100%;max-width:100%;margin-top:0}
+}
