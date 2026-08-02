@@ -1006,5 +1006,5 @@ window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredIns
 $('#install').onclick=async()=>{deferredInstall?.prompt();deferredInstall=null;$('#install').hidden=true};
 if('serviceWorker'in navigator)navigator.serviceWorker.register('sw.js');
 window.HONGetData=()=>structuredClone(db);
-window.HONApplyCloud=(payload,updatedAt)=>{let clean=structuredClone(payload||{});Object.keys(clean).filter(key=>key.startsWith('_honSync')).forEach(key=>delete clean[key]);db=migrate(clean);localStorage.setItem('honSheli',JSON.stringify(db));render();toast('הנתונים עודכנו מהענן')};
+window.HONApplyCloud=(payload,updatedAt)=>{let clean=structuredClone(payload||{});Object.keys(clean).filter(key=>key.startsWith('_honSync')).forEach(key=>delete clean[key]);let next=migrate(clean),unchanged=JSON.stringify(next)===JSON.stringify(db);db=next;localStorage.setItem('honSheli',JSON.stringify(db));if(unchanged)return;render();toast('הנתונים עודכנו מהענן')};
 persist(false);render();window.HONCloud?.init();
