@@ -1,0 +1,45 @@
+HON v47 — הפעלה חד-פעמית של התראות כשהאפליקציה סגורה
+
+למה נדרשת הגדרה נוספת?
+אתר שמאוחסן ב-GitHub Pages אינו יכול להתעורר בעצמו בשעה שנקבעה. לכן ההתראה נשלחת דרך פרויקט Supabase הקיים ומתקבלת בטלפון באמצעות Push גם כשהאפליקציה סגורה.
+
+א. יצירת הטבלאות
+1. היכנס ל-Supabase של HON.
+2. פתח SQL Editor.
+3. הדבק והרץ את הקובץ supabase-notifications-setup.sql.
+   בשלב הראשון אפשר להשאיר את קטע התזמון שבסוף הקובץ כהערות.
+
+ב. יצירת מפתחות VAPID
+במחשב עם Node.js הרץ:
+
+  npx web-push generate-vapid-keys --json
+
+שמור את PUBLIC_KEY ואת PRIVATE_KEY. אל תעלה את המפתח הפרטי ל-GitHub.
+
+ג. פריסת פונקציית הרקע
+מתוך התיקייה שחולצה, לאחר התחברות וקישור לפרויקט Supabase:
+
+  npx supabase functions deploy hon-reminders
+  npx supabase secrets set VAPID_PUBLIC_KEY="PUBLIC_KEY" VAPID_PRIVATE_KEY="PRIVATE_KEY" VAPID_SUBJECT="mailto:YOUR_EMAIL"
+
+הקוד של הפונקציה נמצא ב:
+supabase/functions/hon-reminders/index.ts
+
+ד. הפעלת בדיקה אוטומטית בכל דקה
+1. חזור לקובץ supabase-notifications-setup.sql.
+2. בתחתית הקובץ נמצא קטע מתוזמן שמתחיל ב-vault.create_secret.
+3. הסר ממנו את סימני ההערה, החלף:
+   - PROJECT_REF בכתובת פרויקט Supabase.
+   - YOUR_SERVICE_ROLE_KEY במפתח service_role של הפרויקט.
+4. הרץ את הקטע פעם אחת בלבד.
+
+חשוב: service_role הוא סוד מנהלי. אין להכניס אותו לקובצי האתר או ל-GitHub.
+
+ה. הפעלה בטלפון
+1. פתח את HON כאפליקציה מותקנת בטלפון.
+2. עבור להגדרות > התראות ותזכורות.
+3. לחץ "הפעלת התראות בטלפון" ואשר את הרשאת ההתראות.
+4. לחץ "בדיקת התראה".
+5. צור התראה חד-פעמית או חוזרת.
+
+אם ההתראות נחסמו בעבר, יש להיכנס להגדרות Android > אפליקציות > Chrome או HON > התראות, ולאפשר אותן.
