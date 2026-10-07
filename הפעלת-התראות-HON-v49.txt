@@ -1,0 +1,32 @@
+HON v49 — תשתית ההתראות בטלפון
+
+המצב ב-v49:
+- ממשק ההתראות קיים בטלפון בלבד.
+- המחשב אינו נרשם ל-Push ואינו מנהל תזכורות.
+- Supabase Cron מפעיל את hon-reminders פעם בדקה, ולכן ההתראות אינן תלויות במחשב פתוח או ברענון דפדפן.
+
+לפרויקט שכבר הוגדר:
+1. אין ליצור זוג VAPID חדש.
+2. אין לשנות את VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY או VAPID_SUBJECT.
+3. אין לשנות את CRON_SECRET או את הכותרת X-Cron-Secret במסגרת עדכון רגיל.
+4. השאר את Verify JWT with legacy secret כבוי.
+5. לאחר העלאת v49 ל-GitHub, פרוס מחדש את הפונקציה בלבד:
+
+   npx supabase functions deploy hon-reminders --no-verify-jwt
+
+6. בטלפון סגור ופתח מחדש את HON, עבור להגדרות ובדוק שאזור ההתראות מוצג.
+
+אימות ה-dispatch בפונקציה:
+- הסוד נקרא CRON_SECRET ונשמר ב-Edge Function Secrets.
+- ה-Cron שולח אותו בכותרת X-Cron-Secret.
+- אין להשתמש ב-Authorization: Bearer עם service_role לצורך dispatch.
+
+בדיקה מומלצת:
+1. צור בטלפון תזכורת לעוד 2 דקות.
+2. סגור את HON לחלוטין.
+3. בדוק שההתראה מתקבלת.
+4. אם לא, פתח Supabase > Edge Functions > hon-reminders > Logs וחפש push failed.
+
+אבטחה:
+- אין להכניס מפתחות VAPID פרטיים, CRON_SECRET או service_role ל-GitHub או לצ'אט.
+- לאחר השלמת בדיקות ההתראות אפשר להחליף את CRON_SECRET שנחשף בעבר, ולעדכן באותו רגע גם את Secret של הפונקציה וגם את ה-Cron.

@@ -321,6 +321,7 @@ const field={
 function txForm(t={}){
  return `<div class="form-grid">${field.kind(t.kind||'expense')}<label>סכום<input name="amount" type="number" min="0.01" step="0.01" value="${t.amount||''}" required></label><label>תאריך<input name="date" type="date" value="${t.date||today()}" required></label>${field.categories(t.kind||'expense',t.category)}${field.accounts(t.account)}<label class="full">תיאור<input name="note" value="${esc(t.note||'')}" placeholder="למשל: קניות לשבת"></label><label class="check full"><input name="reviewed" type="checkbox" ${t.reviewed!==false?'checked':''}> התנועה נבדקה ואושרה</label></div>${field.actions}`
 }
+const notificationPhoneDevice=()=>window.HONNotifications?.isPhone?.()===true;
 const actions={
  addTx(){modal('תנועה חדשה',txForm(),x=>{db.transactions.push({...x,id:uid(),amount:+x.amount,reviewed:x.reviewed==='on'});save('התנועה נוספה')});bindDynamicKind()},
  editTx(id){let t=db.transactions.find(x=>x.id===id);modal('עריכת תנועה',txForm(t)+`<button type="button" class="danger" id="deleteInside">מחיקת התנועה</button>`,x=>{Object.assign(t,x,{amount:+x.amount,reviewed:x.reviewed==='on'});save()});$('#deleteInside').onclick=()=>{if(confirm('למחוק את התנועה?')){db.transactions=db.transactions.filter(x=>x.id!==id);$('#modal').hidden=true;save('התנועה נמחקה')}};bindDynamicKind()},
@@ -330,11 +331,11 @@ const actions={
  editAccount:id=>editAccount(db.accounts.find(a=>a.id===id)),
  addRecurring(){editRecurring()},
  editRecurring:id=>editRecurring(db.recurring.find(r=>r.id===id)),
- addReminder(){editReminder()},
- editReminder:id=>editReminder(db.reminders.find(r=>r.id===id)),
- toggleReminder(id){let r=db.reminders.find(x=>x.id===id);if(!r)return;r.active=!r.active;r.updatedAt=new Date().toISOString();save(r.active?'ההתראה הופעלה':'ההתראה הושהתה');window.HONNotifications?.sync?.()},
- enableNotifications(){window.HONNotifications?.enable?.()},
- testNotification(){window.HONNotifications?.test?.()},
+ addReminder(){if(notificationPhoneDevice())editReminder()},
+ editReminder(id){if(notificationPhoneDevice())editReminder(db.reminders.find(r=>r.id===id))},
+ toggleReminder(id){if(!notificationPhoneDevice())return;let r=db.reminders.find(x=>x.id===id);if(!r)return;r.active=!r.active;r.updatedAt=new Date().toISOString();save(r.active?'ההתראה הופעלה':'ההתראה הושהתה');window.HONNotifications?.sync?.()},
+ enableNotifications(){if(notificationPhoneDevice())window.HONNotifications?.enable?.()},
+ testNotification(){if(notificationPhoneDevice())window.HONNotifications?.test?.()},
  addGoal(){editGoal()},
  editGoal:id=>editGoal(db.goals.find(g=>g.id===id)),
  deposit(id){let g=db.goals.find(x=>x.id===id);modal('הפקדה למטרה',`<label>סכום ההפקדה<input name="amount" type="number" min="1" required></label>${field.actions}`,x=>{g.current+=+x.amount;db.transactions.push({id:uid(),date:today(),kind:'saving',amount:+x.amount,category:db.categories.find(c=>c.kind==='saving')?.id,note:`הפקדה: ${g.name}`,reviewed:true});save('ההפקדה נרשמה')})},
@@ -362,6 +363,7 @@ function reminderWhenLabel(r={}){
  let date=reminderInitialDate(r);return date.toLocaleString('he-IL',{day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'})
 }
 function editReminder(reminder={}){
+ if(!notificationPhoneDevice())return;
  let r=reminder||{},defaultDate=r.date||today(),defaultTime=r.time||'09:00',repeat=r.repeat||'none';
  modal(r.id?'עריכת התראה':'התראה חדשה',`<div class="form-grid stitch-reminder-form"><label class="full">מה להזכיר?<input name="title" value="${esc(r.title||'')}" placeholder="למשל: לבדוק את התקציב" required maxlength="80"></label><label class="full">פירוט קצר<textarea name="body" rows="2" maxlength="220" placeholder="הודעה שתופיע בהתראה">${esc(r.body||'')}</textarea></label><label>תאריך<input name="date" type="date" value="${defaultDate}" required></label><label>שעה<input name="time" type="time" value="${defaultTime}" required></label><label class="full">חזרה<select name="repeat" id="reminderRepeat"><option value="none" ${repeat==='none'?'selected':''}>פעם אחת</option><option value="daily" ${repeat==='daily'?'selected':''}>כל יום</option><option value="weekly" ${repeat==='weekly'?'selected':''}>כל שבוע</option><option value="monthly" ${repeat==='monthly'?'selected':''}>כל חודש</option><option value="interval" ${repeat==='interval'?'selected':''}>כל מרווח שאבחר</option></select></label><div class="full stitch-reminder-interval" id="reminderInterval"><label>כל כמה?<input name="intervalValue" type="number" min="1" max="365" value="${Math.max(1,+r.intervalValue||1)}"></label><label>יחידה<select name="intervalUnit"><option value="days" ${r.intervalUnit!=='weeks'&&r.intervalUnit!=='months'?'selected':''}>ימים</option><option value="weeks" ${r.intervalUnit==='weeks'?'selected':''}>שבועות</option><option value="months" ${r.intervalUnit==='months'?'selected':''}>חודשים</option></select></label></div><label class="check full"><input name="active" type="checkbox" ${r.active!==false?'checked':''}> ההתראה פעילה</label></div>${field.actions}${r.id?'<button type="button" class="danger" id="deleteReminder">מחיקת ההתראה</button>':''}`,values=>{let scheduled=new Date(`${values.date}T${values.time}:00`),now=new Date().toISOString(),next={...values,title:values.title.trim(),body:values.body.trim(),intervalValue:Math.max(1,+values.intervalValue||1),intervalUnit:values.intervalUnit||'days',active:values.active==='on',nextAt:Number.isNaN(scheduled.getTime())?'':scheduled.toISOString(),createdAt:r.createdAt||now,updatedAt:now};if(r.id)Object.assign(r,next);else db.reminders.push({...next,id:uid()});save('ההתראה נשמרה');window.HONNotifications?.sync?.()});
  let repeatField=$('#reminderRepeat'),interval=$('#reminderInterval'),refresh=()=>interval.hidden=repeatField.value!=='interval';repeatField.onchange=refresh;refresh();

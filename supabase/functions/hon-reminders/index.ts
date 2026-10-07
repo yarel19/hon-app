@@ -3,7 +3,7 @@ import webpush from "npm:web-push@3.6.7";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-cron-secret",
 };
 
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), {
@@ -13,6 +13,7 @@ const json = (value: unknown, status = 200) => new Response(JSON.stringify(value
 
 const projectUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const cronSecret = Deno.env.get("CRON_SECRET") ?? "";
 const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@example.com";
@@ -49,11 +50,20 @@ async function userFromRequest(req: Request) {
   return data.user ?? null;
 }
 
+function isPhoneUserAgent(value: unknown) {
+  const userAgent = String(value ?? "");
+  return /iPhone|iPod/i.test(userAgent) || (/Android/i.test(userAgent) && /Mobile/i.test(userAgent));
+}
+
 async function sendToUser(userId: string, payload: Record<string, unknown>) {
   const { data: subscriptions, error } = await admin.from("hon_push_subscriptions").select("*").eq("user_id", userId).eq("active", true);
   if (error) throw error;
   let sent = 0;
   for (const subscription of subscriptions ?? []) {
+    if (!isPhoneUserAgent(subscription.user_agent)) {
+      await admin.from("hon_push_subscriptions").update({ active: false, updated_at: new Date().toISOString() }).eq("id", subscription.id);
+      continue;
+    }
     try {
       await webpush.sendNotification({ endpoint: subscription.endpoint, keys: { p256dh: subscription.p256dh, auth: subscription.auth } }, JSON.stringify(payload));
       sent += 1;
@@ -84,7 +94,7 @@ Deno.serve(async (req) => {
     return json({ sent });
   }
 
-  if (action !== "dispatch" || req.headers.get("Authorization") !== `Bearer ${serviceRoleKey}`) return json({ error: "Unauthorized" }, 401);
+  if (action !== "dispatch" || !cronSecret || req.headers.get("X-Cron-Secret") !== cronSecret) return json({ error: "Unauthorized" }, 401);
   const now = new Date().toISOString();
   const { data: reminders, error } = await admin.from("hon_reminders").select("*").eq("active", true).lte("next_at", now).order("next_at").limit(250);
   if (error) return json({ error: error.message }, 500);

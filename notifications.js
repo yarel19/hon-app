@@ -1,18 +1,23 @@
 (function(){
  const state={ready:false,busy:false,error:'',subscription:null};
- const supported=()=>('Notification'in window)&&('serviceWorker'in navigator)&&('PushManager'in window);
+ const isPhone=()=>{
+  const ua=String(navigator.userAgent||'');
+  return navigator.userAgentData?.mobile===true||/iPhone|iPod/i.test(ua)||(/Android/i.test(ua)&&/Mobile/i.test(ua))
+ };
+ const supported=()=>isPhone()&&('Notification'in window)&&('serviceWorker'in navigator)&&('PushManager'in window);
  const decodeKey=value=>{let padding='='.repeat((4-value.length%4)%4),base64=(value+padding).replace(/-/g,'+').replace(/_/g,'/'),raw=atob(base64);return Uint8Array.from([...raw].map(char=>char.charCodeAt(0)))};
  const api=()=>window.HONCloud;
  const session=()=>api()?.session;
  const notifyRender=()=>{if(document.querySelector('.stitch-notification-settings')&&typeof window.render==='function')window.render()};
  function label(){
+  if(!isPhone())return'זמין בטלפון בלבד';
   if(!supported())return'המכשיר לא תומך';
   if(Notification.permission==='denied')return'חסומות בהגדרות הטלפון';
   if(state.ready)return'פעילות בטלפון';
   if(state.error)return'נדרשת השלמת הגדרה';
   return Notification.permission==='granted'?'ממתינות לחיבור':'טרם הופעלו'
  }
- function status(){return{supported:supported(),permission:supported()?Notification.permission:'unsupported',ready:state.ready,label:label(),error:state.error}}
+ function status(){return{phone:isPhone(),supported:supported(),permission:supported()?Notification.permission:'unsupported',ready:isPhone()&&state.ready,label:label(),error:state.error}}
  async function saveSubscription(subscription){
   let cloud=api(),active=session();if(!cloud?.configured||!active?.user?.id)throw new Error('יש להתחבר לענן לפני הפעלת ההתראות');
   let json=subscription.toJSON(),keys=json.keys||{};
@@ -23,7 +28,7 @@
   return{user_id:userId,id:reminder.id,title:reminder.title,body:reminder.body||'',next_at:scheduled.toISOString(),repeat_type:reminder.repeat||'none',interval_value:Math.max(1,+reminder.intervalValue||1),interval_unit:reminder.intervalUnit||'days',active:reminder.active!==false,payload:{date:reminder.date,time:reminder.time,timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'Asia/Jerusalem'},updated_at:reminder.updatedAt||reminder.createdAt||new Date().toISOString()}
  }
  async function sync(){
-  if(state.busy||!state.ready)return false;
+  if(!isPhone()||state.busy||!state.ready)return false;
   let cloud=api(),active=session(),data=window.HONGetData?.();if(!cloud||!active?.user?.id||!data)return false;
   state.busy=true;
   try{
@@ -37,6 +42,7 @@
   finally{state.busy=false;notifyRender()}
  }
  async function enable(){
+  if(!isPhone())return false;
   if(!supported()){window.toast?.('המכשיר הזה אינו תומך בהתראות PWA');return false}
   if(state.busy)return false;
   state.busy=true;
@@ -50,16 +56,18 @@
   finally{state.busy=false}
  }
  async function test(){
+  if(!isPhone())return false;
   if(!state.ready){window.toast?.('יש להפעיל תחילה את ההתראות');return}
   try{await api().request('/functions/v1/hon-reminders?action=test',{method:'POST',body:JSON.stringify({title:'HON · בדיקת התראה',body:'ההתראות פועלות גם כשהאפליקציה סגורה.'})});window.toast?.('התראת בדיקה נשלחה לטלפון')}
   catch(error){state.error=error.message||'בדיקת ההתראה נכשלה';window.toast?.(state.error);notifyRender()}
  }
  async function init(){
-  if(!supported()||Notification.permission!=='granted')return;
+  if(!isPhone()||!supported()||Notification.permission!=='granted')return;
   try{let registration=await navigator.serviceWorker.ready,subscription=await registration.pushManager.getSubscription();if(subscription){state.subscription=subscription;state.ready=true;localStorage.setItem('honPushReady','1');await saveSubscription(subscription);await sync()}}
   catch(error){state.error=error.message||'שירות ההתראות אינו מחובר';state.ready=false;localStorage.removeItem('honPushReady')}
   notifyRender()
  }
- window.HONNotifications={status,enable,test,sync,init};
- window.addEventListener('load',()=>setTimeout(init,900));
+ if(!isPhone())localStorage.removeItem('honPushReady');
+ window.HONNotifications={isPhone,status,enable,test,sync,init};
+ window.addEventListener('load',()=>{if(isPhone())setTimeout(init,900)});
 })();

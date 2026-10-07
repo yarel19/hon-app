@@ -52,7 +52,7 @@ with check ((select auth.uid()) = user_id);
 -- יש להחליף את שתי הדוגמאות בערכים של פרויקט Supabase שלך.
 --
 -- select vault.create_secret('https://PROJECT_REF.supabase.co', 'hon_project_url');
--- select vault.create_secret('YOUR_SERVICE_ROLE_KEY', 'hon_service_role_key');
+-- select vault.create_secret('YOUR_CRON_SECRET', 'hon_cron_secret');
 --
 -- select cron.schedule(
 --   'hon-reminders-every-minute',
@@ -62,7 +62,7 @@ with check ((select auth.uid()) = user_id);
 --     url := (select decrypted_secret from vault.decrypted_secrets where name = 'hon_project_url') || '/functions/v1/hon-reminders?action=dispatch',
 --     headers := jsonb_build_object(
 --       'Content-Type', 'application/json',
---       'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'hon_service_role_key')
+--       'X-Cron-Secret', (select decrypted_secret from vault.decrypted_secrets where name = 'hon_cron_secret')
 --     ),
 --     body := '{}'::jsonb
 --   );
